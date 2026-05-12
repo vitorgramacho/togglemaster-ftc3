@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: targeting-postgres-init
+  namespace: targeting-namespace
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: postgres:15-alpine
+          command: ["sh", "-c"]
+          args:
+            - psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -f /mnt/init.sql
+          env:
+            - { name: DB_HOST,     valueFrom: { secretKeyRef: { name: togglemaster-db-secret, key: DB_HOST     } } }
+            - { name: DB_USER,     valueFrom: { secretKeyRef: { name: togglemaster-db-secret, key: DB_USER     } } }
+            - { name: DB_NAME,     valueFrom: { secretKeyRef: { name: togglemaster-db-secret, key: DB_NAME     } } }
+            - { name: PGPASSWORD,  valueFrom: { secretKeyRef: { name: togglemaster-db-secret, key: DB_PASSWORD } } }
+          volumeMounts: [ { name: init-sql, mountPath: /mnt } ]
+      volumes:
+        - name: init-sql
+          configMap: { name: targeting-postgres-init-cm }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: targeting-postgres-init-cm
+  namespace: targeting-namespace
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS targeting_rules (
+      id SERIAL PRIMARY KEY,
+      flag_name VARCHAR(100) UNIQUE NOT NULL,
+      is_enabled BOOLEAN NOT NULL DEFAULT true,
+      rules JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE OR REPLACE FUNCTION trigger_set_timestamp() RETURNS TRIGGER AS $$
+    BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+    $$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS set_timestamp ON targeting_rules;
+    CREATE TRIGGER set_timestamp BEFORE UPDATE ON targeting_rules
+      FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();

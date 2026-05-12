@@ -1,0 +1,298 @@
+# =============================================================================
+# Workflow reutilizável — ToggleMaster CI/CD por microsserviço
+#
+# Este workflow é chamado pelos 5 workflows leves (ci-<service>.yml).
+# Estágios (jobs):
+#   1) build-test         → compila e roda testes unitários
+#   2) lint               → golangci-lint (Go) ou flake8 (Python)
+#   3) security           → SCA (Trivy fs) + SAST (gosec/bandit)
+#                          ↳ FALHA o pipeline em CRITICAL
+#   4) docker             → build da imagem + Trivy image scan + push ECR
+#   5) update-gitops      → atualiza tag de imagem no repo GitOps
+# =============================================================================
+
+name: Reusable CI/CD
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: "Nome do microsserviço (auth, flag, targeting, evaluation, analytics)."
+        required: true
+        type: string
+      language:
+        description: "Linguagem do serviço: 'go' ou 'python'."
+        required: true
+        type: string
+      aws_region:
+        type: string
+        default: "us-east-1"
+      ecr_repository:
+        description: "Nome do repositório ECR (sem o registry)."
+        type: string
+        required: true
+      gitops_path:
+        description: "Caminho do arquivo de deployment no repo GitOps."
+        type: string
+        required: true
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_SESSION_TOKEN:
+        required: false # opcional (necessário em AWS Academy)
+      GITOPS_TOKEN:
+        required: false # PAT para escrever no repo GitOps (se for repo separado)
+
+permissions:
+  contents: write       # precisa para commit no repo GitOps
+  security-events: write
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1) BUILD & UNIT TEST
+  # ───────────────────────────────────────────────────────────────────────────
+  build-test:
+    name: Build & Unit Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Go build + test
+        if: inputs.language == 'go'
+        working-directory: services/${{ inputs.service }}-service
+        run: |
+          go mod download
+          go build ./...
+          # Não falha se não houver testes — apenas roda os que existirem.
+          go test ./... -count=1 -coverprofile=coverage.out || \
+            { code=$?; [ $code -eq 5 ] && echo "Sem testes" || exit $code; }
+
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Python install + test
+        if: inputs.language == 'python'
+        working-directory: services/${{ inputs.service }}-service
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+          # Se houver testes (tests/ ou test_*.py), roda. Senão, OK.
+          if compgen -G "test_*.py" > /dev/null || [ -d tests ]; then
+            pytest -q
+          else
+            echo "Sem testes para ${{ inputs.service }} — skip."
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2) LINT / STATIC ANALYSIS
+  # ───────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: golangci-lint
+        if: inputs.language == 'go'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: services/${{ inputs.service }}-service
+          args: --timeout=5m
+
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: flake8
+        if: inputs.language == 'python'
+        working-directory: services/${{ inputs.service }}-service
+        run: |
+          pip install flake8
+          flake8 . --count --max-line-length=127 \
+            --ignore=E302,E305,E261,E701,W291,W292,W293,W391,F401 --statistics
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3) SECURITY SCAN (SAST + SCA)
+  #    Aqui está a "Regra de Bloqueio" do desafio: exit-code=1 em CRITICAL.
+  # ───────────────────────────────────────────────────────────────────────────
+  security:
+    name: Security Scan (SAST + SCA)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- SCA: dependências (filesystem scan) ---------------------------------
+      - name: SCA — Trivy filesystem (dependências)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: 'fs'
+          scan-ref: 'services/${{ inputs.service }}-service'
+          severity: 'CRITICAL'
+          exit-code: '1'                # ← BLOQUEIA pipeline em CRITICAL
+          ignore-unfixed: true
+          format: 'table'
+
+      # --- SAST: código-fonte ------------------------------------------------
+      - name: Setup Go (SAST)
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: SAST — gosec (Go)
+        if: inputs.language == 'go'
+        working-directory: services/${{ inputs.service }}-service
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          # -severity high faz o gosec retornar exit-code != 0 quando achar
+          # algo HIGH ou superior (CRITICAL nem sempre existe no gosec; HIGH
+          # já é o nível mais alto reportado para muitas regras).
+          gosec -severity high -fmt sarif -out gosec.sarif ./... || EXIT=$?
+          # Falha se gosec encontrou findings sev>=HIGH
+          if [ "${EXIT:-0}" -ne 0 ]; then
+            echo "::error::gosec encontrou vulnerabilidades CRITICAL/HIGH."
+            exit 1
+          fi
+
+      - name: Setup Python (SAST)
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: SAST — bandit (Python)
+        if: inputs.language == 'python'
+        working-directory: services/${{ inputs.service }}-service
+        run: |
+          pip install bandit
+          # -lll = só reporta severity HIGH. Sai com código != 0 se achar.
+          bandit -r . -lll -x ./tests || EXIT=$?
+          if [ "${EXIT:-0}" -ne 0 ]; then
+            echo "::error::bandit encontrou vulnerabilidades CRITICAL/HIGH."
+            exit 1
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 4) DOCKER BUILD + IMAGE SCAN + PUSH ECR
+  #    Roda apenas em push na main (não em PR), porque não queremos
+  #    publicar imagem em ECR a cada PR.
+  # ───────────────────────────────────────────────────────────────────────────
+  docker:
+    name: Docker Build + Scan + Push
+    runs-on: ubuntu-latest
+    needs: security
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+      image_uri: ${{ steps.tag.outputs.uri }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Compute image tag (v1.0.0-<sha curto>)
+        id: tag
+        run: |
+          SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAG="v1.0.0-${SHORT}"
+          URI="${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr_repository }}:${TAG}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "uri=${URI}" >> $GITHUB_OUTPUT
+          echo "Tag final: ${TAG}"
+          echo "URI final: ${URI}"
+
+      - name: Docker build
+        run: |
+          docker build \
+            -t ${{ steps.tag.outputs.uri }} \
+            -t ${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr_repository }}:latest \
+            ./services/${{ inputs.service }}-service
+
+      - name: Trivy — Container scan (CRITICAL bloqueia)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ steps.tag.outputs.uri }}
+          severity: 'CRITICAL'
+          exit-code: '1'
+          ignore-unfixed: true
+          format: 'table'
+
+      - name: Push to ECR
+        run: |
+          docker push ${{ steps.tag.outputs.uri }}
+          docker push ${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr_repository }}:latest
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 5) UPDATE GITOPS REPO — atualiza tag de imagem no deployment.yaml
+  #    É este passo que aciona o ArgoCD a sincronizar a nova versão.
+  # ───────────────────────────────────────────────────────────────────────────
+  update-gitops:
+    name: Update GitOps Manifest
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repo (com permissão de write)
+        uses: actions/checkout@v4
+        with:
+          # Se o repo GitOps for o MESMO deste serviço (monorepo), o
+          # GITHUB_TOKEN padrão basta. Se for separado, use um PAT em
+          # secrets.GITOPS_TOKEN e ajuste o `repository` aqui.
+          token: ${{ secrets.GITOPS_TOKEN || github.token }}
+          fetch-depth: 0
+
+      - name: Update image tag in deployment manifest
+        env:
+          IMAGE_URI: ${{ needs.docker.outputs.image_uri }}
+          MANIFEST_PATH: ${{ inputs.gitops_path }}
+        run: |
+          echo "Atualizando $MANIFEST_PATH com imagem $IMAGE_URI"
+          # Substitui a linha `image: ...` apontando para o container deste serviço.
+          # Funciona em manifests onde cada arquivo tem 1 container relevante.
+          sed -i -E "s|^( *image:).*\$|\1 ${IMAGE_URI}|" "$MANIFEST_PATH"
+          echo "── Diff resultante ──"
+          git diff "$MANIFEST_PATH" || true
+
+      - name: Commit & push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Nada para commitar (tag já estava atualizada)."
+            exit 0
+          fi
+          git add "${{ inputs.gitops_path }}"
+          git commit -m "chore(gitops): bump ${{ inputs.service }} image to ${{ needs.docker.outputs.image_tag }}"
+          git push

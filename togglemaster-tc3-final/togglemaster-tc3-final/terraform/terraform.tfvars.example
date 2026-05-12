@@ -1,0 +1,14 @@
+# Copie este arquivo para `terraform.tfvars` e ajuste os valores.
+# O arquivo terraform.tfvars está no .gitignore.
+
+aws_region   = "us-east-1"
+project      = "togglemaster"
+cluster_name = "togglemaster-eks-prod"
+
+# Coloque aqui a URL HTTPS do SEU repositório no GitHub:
+gitops_repo_url = "https://github.com/SEU-USUARIO/togglemaster-tc3.git"
+gitops_revision = "HEAD"
+
+# Em AWS Academy: false (use port-forward).
+# Em conta pessoal: true se quiser acessar a UI via DNS de LB.
+expose_argocd_lb = false
