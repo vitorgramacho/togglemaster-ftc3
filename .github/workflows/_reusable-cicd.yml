@@ -296,4 +296,11 @@ jobs:
           fi
           git add "${{ inputs.gitops_path }}"
           git commit -m "chore(gitops): bump ${{ inputs.service }} image to ${{ needs.docker.outputs.image_tag }}"
-          git push
+          
+          # 3. Estratégia Anti-Conflito: Rebase
+          # O --rebase garante que o seu commit seja colocado no topo dos commits
+          # feitos por outros serviços (ex: auth, flag) que terminaram enquanto este rodava.
+          git pull --rebase origin main
+          
+          # 4. Push final
+          git push origin main
