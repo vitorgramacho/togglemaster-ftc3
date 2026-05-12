@@ -242,7 +242,7 @@ jobs:
             ./services/${{ inputs.service }}-service
 
       - name: Trivy — Container scan (CRITICAL bloqueia)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: ${{ steps.tag.outputs.uri }}
           severity: 'CRITICAL'
