@@ -64,7 +64,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-          args: --timeout=5m -D errcheck --exclude="SA1019"
 
       - name: Go build + test
         if: inputs.language == 'go'
@@ -110,6 +109,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          args: --timeout=5m -D errcheck --exclude="SA1019"
 
       - name: golangci-lint
         if: inputs.language == 'go'
@@ -146,7 +146,7 @@ jobs:
 
       # --- SCA: dependências (filesystem scan) ---------------------------------
       - name: SCA — Trivy filesystem (dependências)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: 'services/${{ inputs.service }}-service'
