@@ -304,3 +304,55 @@ jobs:
           
           # 4. Push final
           git push origin main
+
+    # ───────────────────────────────────────────────────────────────────────────
+    # 6) Terraform — 
+    #    ...
+    # ───────────────────────────────────────────────────────────────────────────
+    terraform:
+      name: "Terraform Apply"
+      runs-on: ubuntu-latest
+      
+      defaults:
+        run:
+          working-directory: ./terraform
+
+      steps:
+        - name: Checkout Code
+          uses: actions/checkout@v4
+
+        - name: Configure AWS Credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            # Segredos essenciais para o AWS Academy (LabRole)
+            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+            aws-region: us-east-1
+
+        - name: Setup Terraform
+          uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: 1.5.0
+
+        - name: Terraform Init
+          # O backend.tf já define use_lockfile, dispensando DynamoDB
+          run: terraform init
+
+        - name: Terraform Plan
+          env:
+            TF_VAR_gitops_repo_url: ${{ secrets.GITOPS_REPO_URL }}
+          run: terraform plan -out=tfplan
+
+        - name: Terraform Apply
+          if: github.ref == 'refs/heads/main'
+          env:
+            TF_VAR_gitops_repo_url: ${{ secrets.GITOPS_REPO_URL }}
+          run: terraform apply -auto-approve tfplan
+
+        - name: Post-Deploy Summary
+          run: |
+            echo "### Infraestrutura Provisionada com Sucesso! 🚀" >> $GITHUB_STEP_SUMMARY
+            echo "Acesse os logs para copiar os comandos do ArgoCD e endpoints do RDS." >> $GITHUB_STEP_SUMMARY
+            terraform output
+  
