@@ -1,0 +1,107 @@
+# =============================================================================
+# Ingress unificado do ToggleMaster
+#
+# Correção vs versão anterior:
+#   O Ingress nativo do K8s NÃO aceita FQDN em backend.service.name
+#   (precisa ser o nome curto de um Service no MESMO namespace).
+#
+#   Solução: criamos um namespace `togglemaster-edge` só com Services
+#   do tipo ExternalName apontando para o FQDN real de cada microsserviço.
+#   O Ingress então usa esses Services locais como backend.
+#
+# A classe é `nginx` (ingress-nginx). A instalação do ingress-nginx
+# acontece via ArgoCD/Helm separadamente (ou pode ser feita por Terraform
+# se preferir — aqui deixamos a instalação como opcional/manual).
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: togglemaster-edge
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-backend
+  namespace: togglemaster-edge
+spec:
+  type: ExternalName
+  externalName: auth-service.auth-namespace.svc.cluster.local
+  ports:
+    - port: 8001
+      targetPort: 8001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flag-backend
+  namespace: togglemaster-edge
+spec:
+  type: ExternalName
+  externalName: flag-service.flag-namespace.svc.cluster.local
+  ports:
+    - port: 8002
+      targetPort: 8002
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: targeting-backend
+  namespace: togglemaster-edge
+spec:
+  type: ExternalName
+  externalName: targeting-service.targeting-namespace.svc.cluster.local
+  ports:
+    - port: 8003
+      targetPort: 8003
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evaluation-backend
+  namespace: togglemaster-edge
+spec:
+  type: ExternalName
+  externalName: evaluation-service.evaluation-namespace.svc.cluster.local
+  ports:
+    - port: 8004
+      targetPort: 8004
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-backend
+  namespace: togglemaster-edge
+spec:
+  type: ExternalName
+  externalName: analytics-service.analytics-namespace.svc.cluster.local
+  ports:
+    - port: 8005
+      targetPort: 8005
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: togglemaster-ingress
+  namespace: togglemaster-edge
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /auth(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend: { service: { name: auth-backend,       port: { number: 8001 } } }
+          - path: /flags(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend: { service: { name: flag-backend,       port: { number: 8002 } } }
+          - path: /targeting(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend: { service: { name: targeting-backend,  port: { number: 8003 } } }
+          - path: /evaluation(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend: { service: { name: evaluation-backend, port: { number: 8004 } } }
+          - path: /analytics(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend: { service: { name: analytics-backend,  port: { number: 8005 } } }
