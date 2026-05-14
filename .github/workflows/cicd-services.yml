@@ -151,7 +151,7 @@ jobs:
       GITOPS_TOKEN:          ${{ secrets.GITOPS_TOKEN }}
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 3) Resumo final — agrega resultado da matriz.
+  # ) Resumo final — agrega resultado da matriz.
   #    Único check obrigatório no branch protection.
   # ───────────────────────────────────────────────────────────────────────────
   ci-summary:
