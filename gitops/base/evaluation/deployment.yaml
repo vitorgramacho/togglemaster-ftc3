@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evaluation-service
+  namespace: evaluation-namespace
+  labels: { app: evaluation-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: evaluation-service } }
+  template:
+    metadata: { labels: { app: evaluation-service } }
+    spec:
+      containers:
+        - name: evaluation-service
+          image: public.ecr.aws/docker/library/busybox:latest    # atualizado pelo CI
+          imagePullPolicy: Always
+          ports: [ { containerPort: 8004 } ]
+          env:
+            - { name: PORT, value: "8004" }
+            # REDIS_URL completo (redis://host:port) — vem do Terraform.
+            - name: REDIS_URL
+              valueFrom: { configMapKeyRef: { name: togglemaster-config, key: REDIS_URL } }
+            - name: FLAG_SERVICE_URL
+              valueFrom: { configMapKeyRef: { name: togglemaster-config, key: FLAG_SERVICE_URL } }
+            - name: TARGETING_SERVICE_URL
+              valueFrom: { configMapKeyRef: { name: togglemaster-config, key: TARGETING_SERVICE_URL } }
+            - name: AWS_REGION
+              valueFrom: { configMapKeyRef: { name: togglemaster-config, key: AWS_REGION } }
+            - name: AWS_SQS_URL
+              valueFrom: { configMapKeyRef: { name: togglemaster-config, key: AWS_SQS_URL } }
+            - name: SERVICE_API_KEY
+              valueFrom: { secretKeyRef: { name: evaluation-extra-secret, key: SERVICE_API_KEY } }
+          resources:
+            requests: { cpu: "200m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          readinessProbe: { httpGet: { path: /health, port: 8004 }, initialDelaySeconds: 10, periodSeconds: 5 }
+          livenessProbe:  { httpGet: { path: /health, port: 8004 }, initialDelaySeconds: 30, periodSeconds: 15 }

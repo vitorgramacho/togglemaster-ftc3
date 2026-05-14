@@ -1,0 +1,70 @@
+# =============================================================================
+# auth-service — Deployment
+#
+# Correções vs versão anterior:
+# - Lê DATABASE_URL diretamente do Secret `togglemaster-db-secret` criado
+#   pelo Terraform (módulo k8s-bootstrap). O app já espera essa env var.
+# - Lê MASTER_KEY do Secret `auth-extra-secret` (também criado pelo TF).
+# - A imagem usa o placeholder `:latest` que é REESCRITO pelo CI a cada push
+#   na main (passo update-gitops -> sed -i ...image: ...).
+# - Account ID NÃO mais hardcoded: o registry é injetado pelo CI no momento
+#   do bump. Aqui deixamos um valor inicial qualquer; o ArgoCD vai aplicar
+#   o que o CI atualizar.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: auth-namespace
+  labels:
+    app: auth-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          # ESTA LINHA É ATUALIZADA AUTOMATICAMENTE PELO CI (sed).
+          image: public.ecr.aws/docker/library/busybox:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8001
+              name: http
+          env:
+            - name: PORT
+              value: "8001"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: togglemaster-db-secret
+                  key: DATABASE_URL
+            - name: MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auth-extra-secret
+                  key: MASTER_KEY
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 15

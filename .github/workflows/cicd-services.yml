@@ -1,0 +1,170 @@
+# =============================================================================
+# CI/CD — ToggleMaster Microsserviços (workflow CONSOLIDADO)
+#
+# UM ÚNICO arquivo dispara os 5 pipelines (auth, flag, targeting,
+# evaluation, analytics) em PARALELO, dentro da MESMA run do GitHub Actions.
+#
+# Como funciona:
+#   1) detect-changes  → identifica quais serviços tiveram mudanças
+#                        (dorny/paths-filter)
+#   2) cicd            → matriz com 1 entrada por serviço; cada entrada
+#                        chama o reusable _reusable-cicd.yml com seus
+#                        parâmetros próprios. Serviços sem mudança ficam
+#                        como "Skipped".
+#   3) ci-summary      → job final que agrega o resultado da matriz.
+#                        É o único check obrigatório no branch protection.
+#
+# Resultado: 1 entrada por push no Actions UI, até 5 jobs paralelos
+# visíveis lado-a-lado dentro da mesma run.
+#
+# Trigger:
+#   - pull_request em main com mudanças em services/, gitops/base/ ou workflows
+#   - push em main idem
+#   - workflow_dispatch (manual; por padrão roda TODOS)
+# =============================================================================
+
+name: CI/CD Microservices
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "gitops/base/**"
+      - ".github/workflows/cicd-services.yml"
+      - ".github/workflows/_reusable-cicd.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "gitops/base/**"
+      - ".github/workflows/cicd-services.yml"
+      - ".github/workflows/_reusable-cicd.yml"
+  workflow_dispatch:
+    inputs:
+      force_all:
+        description: "Forçar rodar TODOS os serviços, ignorando paths-filter"
+        required: false
+        type: boolean
+        default: true
+
+# Cancela runs antigas do MESMO PR quando uma nova chega.
+# Em main: deixamos cada commit terminar (não cancela) para não perder builds.
+concurrency:
+  group: cicd-services-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write           # update-gitops faz commit no repo
+  security-events: write
+  pull-requests: read
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1) Detectar quais serviços tiveram mudanças
+  # ───────────────────────────────────────────────────────────────────────────
+  detect-changes:
+    name: Detectar mudanças
+    runs-on: ubuntu-latest
+    outputs:
+      auth:       ${{ steps.filter.outputs.auth }}
+      flag:       ${{ steps.filter.outputs.flag }}
+      targeting:  ${{ steps.filter.outputs.targeting }}
+      evaluation: ${{ steps.filter.outputs.evaluation }}
+      analytics:  ${{ steps.filter.outputs.analytics }}
+      force_all:  ${{ steps.compute.outputs.force_all }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # precisa de 2 commits para o git log do compute
+
+      - name: Paths filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            auth:
+              - 'services/auth-service/**'
+              - 'gitops/base/auth/**'
+            flag:
+              - 'services/flag-service/**'
+              - 'gitops/base/flag/**'
+            targeting:
+              - 'services/targeting-service/**'
+              - 'gitops/base/targeting/**'
+            evaluation:
+              - 'services/evaluation-service/**'
+              - 'gitops/base/evaluation/**'
+            analytics:
+              - 'services/analytics-service/**'
+              - 'gitops/base/analytics/**'
+
+      - name: Computar "rodar todos"
+        id: compute
+        run: |
+          # Roda TODOS quando:
+          #  - workflow_dispatch com force_all=true (padrão)
+          #  - alterações no próprio reusable (afeta os 5)
+          FORCE=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ "${{ inputs.force_all }}" = "true" ]; then
+            FORCE=true
+          fi
+          # Se o reusable mudou no último commit, força todos.
+          if git log -1 --name-only --pretty=format: 2>/dev/null | \
+             grep -q '.github/workflows/_reusable-cicd.yml'; then
+            FORCE=true
+          fi
+          echo "force_all=$FORCE" >> "$GITHUB_OUTPUT"
+          echo "Rodar todos? $FORCE"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2) CI/CD — matrix com 5 entradas → 5 jobs paralelos na mesma run.
+  # ───────────────────────────────────────────────────────────────────────────
+  cicd:
+    name: ${{ matrix.service }}
+    needs: detect-changes
+    strategy:
+      fail-fast: false                       # não cancela os outros se um falhar
+      matrix:
+        include:
+          - { service: auth,       language: go }
+          - { service: flag,       language: python }
+          - { service: targeting,  language: python }
+          - { service: evaluation, language: go }
+          - { service: analytics,  language: python }
+    if: |
+      needs.detect-changes.outputs.force_all == 'true' ||
+      needs.detect-changes.outputs[matrix.service] == 'true'
+
+    uses: ./.github/workflows/_reusable-cicd.yml
+    with:
+      service:        ${{ matrix.service }}
+      language:       ${{ matrix.language }}
+      ecr_repository: togglemaster-${{ matrix.service }}
+      gitops_path:    gitops/base/${{ matrix.service }}/deployment.yaml
+    secrets:
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN:     ${{ secrets.AWS_SESSION_TOKEN }}
+      GITOPS_TOKEN:          ${{ secrets.GITOPS_TOKEN }}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3) Resumo final — agrega resultado da matriz.
+  #    Único check obrigatório no branch protection.
+  # ───────────────────────────────────────────────────────────────────────────
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [detect-changes, cicd]
+    if: always() && needs.detect-changes.result == 'success'
+    steps:
+      - name: Avaliar resultado da matrix
+        run: |
+          RESULT="${{ needs.cicd.result }}"
+          echo "Resultado consolidado da matrix: $RESULT"
+          case "$RESULT" in
+            success|skipped) echo "OK"; exit 0 ;;
+            *) echo "::error::Algum serviço falhou."; exit 1 ;;
+          esac
