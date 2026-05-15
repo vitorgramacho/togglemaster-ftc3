@@ -23,17 +23,6 @@ provider "kubernetes" {
   }
 }
 
-provider "kubectl" {
-  host                   = module.eks.endpoint
-  cluster_ca_certificate = base64decode(module.eks.certificate_authority)
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
-    command     = "aws"
-  }
-  load_config_file = false
-}
-
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
