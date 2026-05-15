@@ -128,6 +128,5 @@ module "argocd" {
   gitops_revision = var.gitops_revision
   expose_lb       = var.expose_argocd_lb
 
-  depends_on = [module.k8s_bootstrap]
   depends_on = [module.eks]
 }
