@@ -170,6 +170,7 @@ jobs:
         if: inputs.language == 'go'
         working-directory: services/${{ inputs.service }}-service
         run: |
+          go mod tidy
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           # -severity high faz o gosec retornar exit-code != 0 quando achar
           # algo HIGH ou superior (CRITICAL nem sempre existe no gosec; HIGH
