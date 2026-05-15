@@ -119,6 +119,7 @@ jobs:
           # Instala golangci-lint a partir do source usando o Go 1.25 do runner.
           # O binário pré-compilado da action v6 foi buildado com Go 1.24
           # e não consegue analisar projetos com "go 1.25" no go.mod.
+          go mod tidy
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
           golangci-lint run --timeout=5m
 
