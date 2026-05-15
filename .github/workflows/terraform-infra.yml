@@ -144,6 +144,8 @@ jobs:
 
       - name: Terraform plan
         id: plan
+        env:
+          TF_LOG: ERROR
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           set +e
