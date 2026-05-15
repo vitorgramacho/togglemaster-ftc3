@@ -148,7 +148,7 @@ jobs:
 
       # --- SCA: dependências (filesystem scan) ---------------------------------
       - name: SCA — Trivy filesystem (dependências)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: 'services/${{ inputs.service }}-service'
@@ -244,7 +244,7 @@ jobs:
             ./services/${{ inputs.service }}-service
 
       - name: Trivy — Container scan (CRITICAL bloqueia)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ steps.tag.outputs.uri }}
           severity: 'CRITICAL'
