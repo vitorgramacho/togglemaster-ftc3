@@ -31,7 +31,7 @@ provider "kubectl" {
     args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
     command     = "aws"
   }
-  load_config_file       = false
+  load_config_file = false
 }
 
 provider "helm" {
