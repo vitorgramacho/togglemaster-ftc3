@@ -1,4 +1,3 @@
-testing eks
 # =============================================================================
 # Módulo: EKS
 # Cria o cluster Kubernetes gerenciado e o Node Group.
