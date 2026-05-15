@@ -111,15 +111,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-          args: --timeout=5m -D errcheck --exclude="SA1019"
 
       - name: golangci-lint
         if: inputs.language == 'go'
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: services/${{ inputs.service }}-service
-          args: --timeout=5m -D errcheck --exclude="SA1019"
+        working-directory: services/${{ inputs.service }}-service
+        run: |
+          # Instala golangci-lint a partir do source usando o Go 1.25 do runner.
+          # O binário pré-compilado da action v6 foi buildado com Go 1.24
+          # e não consegue analisar projetos com "go 1.25" no go.mod.
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          golangci-lint run --timeout=5m
 
       - name: Setup Python
         if: inputs.language == 'python'
@@ -148,7 +149,7 @@ jobs:
 
       # --- SCA: dependências (filesystem scan) ---------------------------------
       - name: SCA — Trivy filesystem (dependências)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: 'services/${{ inputs.service }}-service'
@@ -244,7 +245,7 @@ jobs:
             ./services/${{ inputs.service }}-service
 
       - name: Trivy — Container scan (CRITICAL bloqueia)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ steps.tag.outputs.uri }}
           severity: 'CRITICAL'
