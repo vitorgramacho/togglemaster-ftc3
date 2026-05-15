@@ -69,51 +69,39 @@ resource "helm_release" "argocd" {
 # Application CRDs — registra as 5 apps do ToggleMaster.
 # O ArgoCD vai monitorar o repo GitOps e sincronizar tudo automaticamente.
 # -----------------------------------------------------------------------------
-resource "kubernetes_manifest" "applications" {
-  for_each = toset(var.services)
+resource "kubectl_manifest" "applications" {
+  for_each = toset(["auth", "flag", "targeting", "evaluation", "analytics"]) # Ajuste para sua variável de loop
 
-  manifest = {
-    apiVersion = "argoproj.io/v1alpha1"
-    kind       = "Application"
-    metadata = {
-      name      = "${each.key}-service"
-      namespace = kubernetes_namespace.argocd.metadata[0].name
-      finalizers = [
-        "resources-finalizer.argocd.argoproj.io"
-      ]
-    }
-    spec = {
-      project = "default"
-      source = {
-        repoURL        = var.gitops_repo_url
-        targetRevision = var.gitops_revision
-        path           = "gitops/base/${each.key}"
-      }
-      destination = {
-        server    = "https://kubernetes.default.svc"
-        namespace = "${each.key}-namespace"
-      }
-      syncPolicy = {
-        automated = {
-          prune    = true
-          selfHeal = true
-        }
-        syncOptions = [
-          "CreateNamespace=true",
-          "PrunePropagationPolicy=foreground",
-          "PruneLast=true"
-        ]
-        retry = {
-          limit = 5
-          backoff = {
-            duration    = "10s"
-            factor      = 2
-            maxDuration = "3m"
-          }
-        }
-      }
-    }
-  }
+  yaml_body = <<YAML
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${each.key}
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ${var.gitops_repo_url}
+    targetRevision: ${var.gitops_revision}
+    path: gitops/base/${each.key}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${each.key}-namespace
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+YAML
 
   depends_on = [helm_release.argocd]
 }
