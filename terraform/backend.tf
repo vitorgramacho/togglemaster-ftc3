@@ -13,7 +13,7 @@
 
 terraform {
   backend "s3" {
-    bucket       = "togglemaster-tc3"        # ALTERE para um nome único globalmente
+    bucket       = "togglemaster-tc3" # ALTERE para um nome único globalmente
     key          = "togglemaster/fase3/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true

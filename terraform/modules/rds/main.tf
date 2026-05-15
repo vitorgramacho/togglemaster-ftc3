@@ -90,9 +90,9 @@ resource "aws_db_instance" "this" {
   publicly_accessible    = false
   multi_az               = false
 
-  skip_final_snapshot       = true
-  deletion_protection       = false
-  backup_retention_period   = 1
+  skip_final_snapshot          = true
+  deletion_protection          = false
+  backup_retention_period      = 1
   performance_insights_enabled = false
 
   tags = merge(var.tags, {

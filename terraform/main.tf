@@ -18,9 +18,9 @@ data "aws_iam_role" "labrole" {
 
 locals {
   common_tags = {
-    Project     = var.project
-    Environment = "production"
-    ManagedBy   = "terraform"
+    Project       = var.project
+    Environment   = "production"
+    ManagedBy     = "terraform"
     TechChallenge = "fase3"
   }
 }
