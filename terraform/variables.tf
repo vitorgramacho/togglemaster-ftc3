@@ -30,7 +30,7 @@ variable "services" {
 variable "db_services" {
   description = "Serviços que precisam de RDS."
   type        = list(string)
-  default     = ["auth", "flag", "targeting"]
+  default     = ["authdb", "flagdb", "targetingdb"]
 }
 
 variable "gitops_repo_url" {
