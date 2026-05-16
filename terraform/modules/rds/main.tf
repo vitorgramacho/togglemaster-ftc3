@@ -56,7 +56,7 @@ resource "aws_db_subnet_group" "this" {
 # -----------------------------------------------------------------------------
 # Senhas — geradas aleatoriamente (1 por instância)
 # -----------------------------------------------------------------------------
-resource "random_password" "db" {
+resource "random_password" "db" {---
   for_each = toset(var.databases)
   length   = 20
   special  = true
