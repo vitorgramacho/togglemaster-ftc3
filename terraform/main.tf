@@ -104,7 +104,7 @@ module "k8s_bootstrap" {
   source = "./modules/k8s-bootstrap"
 
   services            = var.services
-  db_services         = var.db_services
+  db_services         = var.db_names
   db_connection_urls  = module.rds.connection_urls
   db_endpoints        = module.rds.endpoints
   db_passwords        = module.rds.passwords

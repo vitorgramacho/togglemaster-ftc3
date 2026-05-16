@@ -10,6 +10,12 @@ variable "db_services" {
   default     = ["auth", "flag", "targeting"]
 }
 
+variable "db_names" {
+  description = "Nomes dos DBs."
+  type        = list(string)
+  default     = ["authdb", "flagdb", "targetingdb"]
+}
+
 variable "db_connection_urls" {
   description = "Map serviço -> DATABASE_URL completa (vem do módulo rds)."
   type        = map(string)

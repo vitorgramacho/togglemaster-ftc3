@@ -34,11 +34,13 @@ resource "kubernetes_namespace" "app" {
 # (auth, flag, targeting). Conteúdo: DATABASE_URL pronta.
 # -----------------------------------------------------------------------------
 resource "kubernetes_secret" "db_url" {
-  for_each = toset(var.db_services) # ["auth", "flag", "targeting"]
+  for_each = toset(var.db_names) # ["auth", "flag", "targeting"]
 
   metadata {
     name      = "togglemaster-db-secret"
-    namespace = kubernetes_namespace.app[each.key].metadata[0].name
+    # Como o namespace se chama "auth-namespace" (sem o "db"), 
+    # usamos replace() para remover o "db" do final da chave temporariamente aqui.
+    namespace = kubernetes_namespace.app[replace(each.key, "db", "")].metadata[0].name
   }
 
   data = {
