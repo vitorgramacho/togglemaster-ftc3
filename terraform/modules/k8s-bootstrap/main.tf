@@ -37,7 +37,7 @@ resource "kubernetes_secret" "db_url" {
   for_each = toset(var.db_names) # ["auth", "flag", "targeting"]
 
   metadata {
-    name      = "togglemaster-db-secret"
+    name = "togglemaster-db-secret"
     # Como o namespace se chama "auth-namespace" (sem o "db"), 
     # usamos replace() para remover o "db" do final da chave temporariamente aqui.
     namespace = kubernetes_namespace.app[replace(each.key, "db", "")].metadata[0].name
