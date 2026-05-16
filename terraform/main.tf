@@ -71,7 +71,7 @@ module "rds" {
   vpc_id         = module.networking.vpc_id
   vpc_cidr_block = module.networking.vpc_cidr_block
   subnet_ids     = module.networking.private_subnet_ids
-  databases      = var.db_services
+  databases      = var.db_names
   tags           = local.common_tags
 }
 
