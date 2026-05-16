@@ -9,7 +9,7 @@
 # - A LabRole dos nodes EKS já consegue ler esses secrets, permitindo que
 #   manifests futuros consumam credenciais via External Secrets Operator
 #   se quiserem. Para o escopo deste TC, as credenciais também são
-#   injetadas como Kubernetes Secret pelo módulo k8s-bootstrap.
+#   injetadas como Kubernetes Secret pelo módulo k8s-bootstrap....
 # =============================================================================
 
 # -----------------------------------------------------------------------------
