@@ -21,7 +21,7 @@ variable "subnet_ids" {
 variable "databases" {
   description = "Lista lógica de bancos a serem criados (cada um vira uma instância RDS separada)."
   type        = list(string)
-  default     = ["auth", "flag", "targeting"]
+  default     = ["authdb", "flagdb", "targetingdb"]
 }
 
 variable "master_username" {
