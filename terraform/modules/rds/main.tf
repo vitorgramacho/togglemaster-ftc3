@@ -1,6 +1,6 @@
 # =============================================================================
 # Módulo: RDS
-# Cria N instâncias PostgreSQL (3 por padrão: auth, flag, targeting).
+# Cria N instâncias PostgreSQL (3 por padrão: auth, flag, targeting)...
 #
 # Decisão de design:
 # - Senhas são geradas com random_password (não há mais dependência de Infisical).
