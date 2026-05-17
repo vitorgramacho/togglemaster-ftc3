@@ -139,7 +139,7 @@ jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
   # 3) SECURITY SCAN (SAST + SCA)
-  #    Aqui está a "Regra de Bloqueio" do desafio: exit-code=1 em CRITICAL.
+  #    Aqui está a "Regra de Bloqueio" do desafio: exit-code=1 em CRITICAL..
   # ───────────────────────────────────────────────────────────────────────────
   security:
     name: Security Scan (SAST + SCA)
