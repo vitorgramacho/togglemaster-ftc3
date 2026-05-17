@@ -204,7 +204,7 @@ jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
   # 4) DOCKER BUILD + IMAGE SCAN + PUSH ECR
-  #    Roda apenas em push na main (não em PR), porque não queremos
+  #    Roda apenas em push na main (não em PR), porque não queremos.
   #    publicar imagem em ECR a cada PR.
   # ───────────────────────────────────────────────────────────────────────────
   docker:
