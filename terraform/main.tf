@@ -7,7 +7,7 @@
 #   3) EKS (cluster + node group) usando LabRole
 #   4) RDS x3 / ElastiCache / DynamoDB / SQS (rodam em paralelo)
 #   5) k8s-bootstrap (namespaces, Secret de DB, ConfigMap, metrics-server)
-#   6) ArgoCD (Helm chart + Application CRDs apontando para gitops/)
+#   6) ArgoCD (Helm chart + Application CRDs apontando para gitops)
 # =============================================================================
 
 # Data source obrigatório no AWS Academy:
