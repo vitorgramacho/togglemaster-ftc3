@@ -1,8 +1,8 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: auth-service-hpa
-  namespace: auth-namespace
+  name: targeting-service-hpa
+  namespace: targeting-namespace
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
