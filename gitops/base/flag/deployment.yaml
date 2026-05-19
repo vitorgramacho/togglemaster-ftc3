@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: flag-service
-          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-flag:v1.0.0-b738eff
+          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-flag:v1.0.0-92831b2
           imagePullPolicy: Always
           ports:
             - containerPort: 8002
