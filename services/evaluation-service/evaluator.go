@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -18,8 +20,35 @@ const (
 	CACHE_TTL = 30 * time.Second
 )
 
+// validFlagNameRe aceita apenas nomes de flag seguros: letras, números, hífens e underscores.
+// Isso previne path traversal e injeção de URL (resolve G107 do gosec).
+var validFlagNameRe = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,128}$`)
+
+// validateFlagName retorna erro se o nome contiver caracteres não permitidos.
+func validateFlagName(name string) error {
+	if !validFlagNameRe.MatchString(name) {
+		return fmt.Errorf("flag_name inválido: apenas letras, números, hífens e underscores são permitidos")
+	}
+	return nil
+}
+
+// buildServiceURL constrói uma URL segura combinando a base com o path.
+// Usa url.Parse + url.PathEscape, eliminando o uso de fmt.Sprintf com variáveis
+// em URLs (G107 do gosec).
+func buildServiceURL(base, pathSuffix, resourceName string) (string, error) {
+	parsed, err := url.Parse(base)
+	if err != nil {
+		return "", fmt.Errorf("URL base inválida (%q): %w", base, err)
+	}
+	parsed.Path = parsed.Path + pathSuffix + url.PathEscape(resourceName)
+	return parsed.String(), nil
+}
+
 // getDecision é o wrapper principal
 func (a *App) getDecision(userID, flagName string) (bool, error) {
+	if err := validateFlagName(flagName); err != nil {
+		return false, err
+	}
 	info, err := a.getCombinedFlagInfo(flagName)
 	if err != nil {
 		return false, err
@@ -96,14 +125,15 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 }
 
 // fetchFlag busca a flag no flag-service.
-//
-// SECURITY (gosec G107/G306): construímos a URL via fmt.Sprintf usando apenas
-// flagName, que vem da query string e poderia conter caracteres ofensivos.
-// Aqui validamos via http.NewRequestWithContext que rejeita URLs malformadas.
+// A URL é construída via url.Parse + url.PathEscape (não via fmt.Sprintf),
+// eliminando o finding G107 do gosec sem necessidade de exclusão.
 func (a *App) fetchFlag(flagName string) (*Flag, error) {
-	url := fmt.Sprintf("%s/flags/%s", a.FlagServiceURL, flagName)
+	safeURL, err := buildServiceURL(a.FlagServiceURL, "/flags/", flagName)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao construir URL do flag-service: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao montar requisição: %w", err)
 	}
@@ -136,10 +166,15 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 	return &flag, nil
 }
 
+// fetchRule busca a regra no targeting-service.
+// Mesma abordagem segura de construção de URL que fetchFlag.
 func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
-	url := fmt.Sprintf("%s/rules/%s", a.TargetingServiceURL, flagName)
+	safeURL, err := buildServiceURL(a.TargetingServiceURL, "/rules/", flagName)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao construir URL do targeting-service: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao montar requisição: %w", err)
 	}
@@ -201,12 +236,7 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 }
 
 // getDeterministicBucket distribui usuários determinísticamente em buckets [0..99].
-//
-// SECURITY (gosec G401): a versão anterior usava SHA-1, considerado quebrado
-// para usos criptográficos. Aqui o uso NÃO é criptográfico (é só hashing
-// para distribuição uniforme), mas o gosec não consegue saber disso e
-// reporta HIGH. Trocamos por SHA-256 — também distribui uniformemente,
-// é amplamente disponível, e elimina o finding.
+// Usa SHA-256 — distribuição uniforme sem uso criptográfico.
 func getDeterministicBucket(input string) int {
 	hash := sha256.Sum256([]byte(input))
 	val := binary.BigEndian.Uint32(hash[:4])
