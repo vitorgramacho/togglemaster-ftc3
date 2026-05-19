@@ -12,7 +12,7 @@ spec:
     spec:
       containers:
         - name: evaluation-service
-          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:v1.0.0-f224ae7
+          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:721259d70ab9510a1374516d80db8a48cae4f651
           imagePullPolicy: Always
           ports: [ { containerPort: 8004 } ]
           env:
