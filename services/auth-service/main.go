@@ -18,7 +18,7 @@ type App struct {
 }
 
 func main() {
-	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada. 
+	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.  
 	_ = godotenv.Load()
 
 	// --- Configuração ---
