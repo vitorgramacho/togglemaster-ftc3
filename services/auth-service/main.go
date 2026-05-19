@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // registra o driver pgx 
+	_ "github.com/jackc/pgx/v5/stdlib" // registra o driver pgx .
 	"github.com/joho/godotenv"
 )
 

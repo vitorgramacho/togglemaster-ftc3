@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 load_dotenv()
 
 
-# --- Configuração ---
+# --- Configuração ----
 # Adicionadas 2 linhas em branco acima (E302)
 AWS_REGION = os.getenv("AWS_REGION")
 SQS_QUEUE_URL = os.getenv("AWS_SQS_URL")

@@ -14,7 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Contexto global para o Redis - Comentário para alterar a tag da imagem   
+// Contexto global para o Redis - Comentário para alterar a tag da imagem.
 var ctx = context.Background()
 
 // App struct para injeção de dependência
