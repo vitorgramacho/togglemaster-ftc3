@@ -9,9 +9,10 @@
 #   do tipo ExternalName apontando para o FQDN real de cada microsserviço.
 #   O Ingress então usa esses Services locais como backend.
 #
-# A classe é `nginx` (ingress-nginx). A instalação do ingress-nginx
-# acontece via ArgoCD/Helm separadamente (ou pode ser feita por Terraform
-# se preferir — aqui deixamos a instalação como opcional/manual).
+# Integração AWS ALB:
+#   A classe permanece `nginx` (ingress-nginx). O ALB criado via Terraform
+#   encaminha o tráfego da porta 80 para os Nodes do EKS, onde o controlador 
+#   NGINX intercepta as chamadas e distribui com base nos paths abaixo.
 # =============================================================================
 apiVersion: v1
 kind: Namespace
@@ -84,7 +85,10 @@ metadata:
   name: togglemaster-ingress
   namespace: togglemaster-edge
   annotations:
+    kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # Garante que o NGINX entenda o redirecionamento de proxy vindo do ALB
+    nginx.ingress.kubernetes.io/use-forwarded-headers: "true"
 spec:
   ingressClassName: nginx
   rules:
@@ -92,16 +96,36 @@ spec:
         paths:
           - path: /auth(/|$)(.*)
             pathType: ImplementationSpecific
-            backend: { service: { name: auth-backend,       port: { number: 8001 } } }
+            backend:
+              service:
+                name: auth-backend
+                port:
+                  number: 8001
           - path: /flags(/|$)(.*)
             pathType: ImplementationSpecific
-            backend: { service: { name: flag-backend,       port: { number: 8002 } } }
+            backend:
+              service:
+                name: flag-backend
+                port:
+                  number: 8002
           - path: /targeting(/|$)(.*)
             pathType: ImplementationSpecific
-            backend: { service: { name: targeting-backend,  port: { number: 8003 } } }
+            backend:
+              service:
+                name: targeting-backend
+                port:
+                  number: 8003
           - path: /evaluation(/|$)(.*)
             pathType: ImplementationSpecific
-            backend: { service: { name: evaluation-backend, port: { number: 8004 } } }
+            backend:
+              service:
+                name: evaluation-backend
+                port:
+                  number: 8004
           - path: /analytics(/|$)(.*)
             pathType: ImplementationSpecific
-            backend: { service: { name: analytics-backend,  port: { number: 8005 } } }
+            backend:
+              service:
+                name: analytics-backend
+                port:
+                  number: 8005
