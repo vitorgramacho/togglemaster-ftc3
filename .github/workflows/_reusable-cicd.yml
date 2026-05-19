@@ -179,10 +179,10 @@ jobs:
           # Falha se gosec encontrou findings sev>=HIGH
           #G107 e G704 são falso positivos no contexto
           gosec -exclude=G107,G704 -severity=high -fmt=text ./...
-          #if [ "${EXIT:-0}" -ne 0 ]; then
-          #  echo "::error::gosec encontrou vulnerabilidades CRITICAL/HIGH."
-          #  exit 1
-          #fi
+          if [ "${EXIT:-0}" -ne 0 ]; then
+            echo "::error::gosec encontrou vulnerabilidades CRITICAL/HIGH."
+            exit 1
+          fi
 
       - name: Setup Python (SAST)
         if: inputs.language == 'python'

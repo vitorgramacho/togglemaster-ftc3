@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // registra o driver pgx
+	_ "github.com/jackc/pgx/v5/stdlib" // registra o driver pgx 
 	"github.com/joho/godotenv"
 )
 
@@ -18,7 +18,7 @@ type App struct {
 }
 
 func main() {
-	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.
+	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.   
 	_ = godotenv.Load()
 
 	// --- Configuração ---
