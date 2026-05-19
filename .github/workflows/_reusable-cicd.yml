@@ -231,14 +231,14 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Compute image tag SHA
-              id: tag
-              run: |
-                TAG="${{ github.sha }}"
-                URI="${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr_repository }}:${TAG}"
-                echo "tag=${TAG}" >> $GITHUB_OUTPUT
-                echo "uri=${URI}" >> $GITHUB_OUTPUT
-                echo "Tag final: ${TAG}"
-                echo "URI final: ${URI}"
+        id: tag
+        run: |
+          TAG="${{ github.sha }}"
+          URI="${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr_repository }}:${TAG}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "uri=${URI}" >> $GITHUB_OUTPUT
+          echo "Tag final: ${TAG}"
+          echo "URI final: ${URI}"
 
       - name: Docker build
         run: |
