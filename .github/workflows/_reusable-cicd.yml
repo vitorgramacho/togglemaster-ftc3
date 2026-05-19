@@ -172,15 +172,20 @@ jobs:
         run: |
           go mod tidy
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          # -severity high faz o gosec retornar exit-code != 0 quando achar
-          # algo HIGH ou superior (CRITICAL nem sempre existe no gosec; HIGH
-          # já é o nível mais alto reportado para muitas regras).
-          gosec -severity high -fmt sarif -out gosec.sarif ./... || EXIT=$?
-          # Falha se gosec encontrou findings sev>=HIGH
-          #G107 e G704 são falso positivos no contexto
-          gosec -exclude=G107,G704 -severity=high -fmt=text ./...
-          if [ "${EXIT:-0}" -ne 0 ]; then
-            echo "::error::gosec encontrou vulnerabilidades CRITICAL/HIGH."
+
+          # Roda sem exclusões: o código foi corrigido para não gerar findings
+          # G107 (URL taint) — URLs construídas via url.Parse + url.PathEscape.
+          # Gera SARIF para upload e exibe texto legível no log.
+          gosec \
+            -severity=high \
+            -fmt=sarif \
+            -out=gosec.sarif \
+            -stdout \
+            ./... ; EXIT=$?
+
+          # exit code 1 = findings encontrados; qualquer outro = erro de tool
+          if [ "${EXIT}" -eq 1 ]; then
+            echo "::error::gosec encontrou vulnerabilidades HIGH/CRITICAL."
             exit 1
           fi
 
@@ -230,10 +235,11 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Compute image tag SHA
+      - name: Compute image tag (v1.0.0-<sha curto>)
         id: tag
         run: |
-          TAG="${{ github.sha }}"
+          SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAG="v1.0.0-${SHORT}"
           URI="${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr_repository }}:${TAG}"
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "uri=${URI}" >> $GITHUB_OUTPUT
