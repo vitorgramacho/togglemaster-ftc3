@@ -31,10 +31,25 @@ resource "aws_ecr_lifecycle_policy" "this" {
   policy = jsonencode({
     rules = [
       {
+        # Regra 1: apaga imagens sem tag em até 1 dia.
+        # Evita acúmulo de camadas de builds cancelados/quebrados.
         rulePriority = 1
-        description  = "Manter apenas as 10 imagens mais recentes."
+        description  = "Expirar imagens não-tageadas após 1 dia."
         selection = {
-          tagStatus   = "any"
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+        action = { type = "expire" }
+      },
+      {
+        # Regra 2: manter apenas as 10 imagens tageadas mais recentes.
+        rulePriority = 2
+        description  = "Manter apenas as 10 imagens tageadas mais recentes."
+        selection = {
+          tagStatus   = "tagged"
+          tagPrefixList = ["v"]
           countType   = "imageCountMoreThan"
           countNumber = 10
         }

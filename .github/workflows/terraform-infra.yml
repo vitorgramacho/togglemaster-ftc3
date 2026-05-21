@@ -350,10 +350,37 @@ jobs:
           echo "     -o jsonpath='{.data.password}' | base64 -d ; echo"
           echo ""
           echo "3) Faça port-forward:"
-          echo "   kubectl -n argocd port-forward svc/argocd-server 8080:443"
+          echo "   kubectl -n argocd port-forward svc/argocd-server 8080:80"
           echo ""
-          echo "4) Acesse: https://localhost:8080  (usuário: admin)"
+          echo "4) Acesse: http://localhost:8080  (usuário: admin)"
           echo "═════════════════════════════════════════════════════════"
+
+      - name: Aguardar e exibir DNS do NLB (ingress-nginx)
+        run: |
+          echo ""
+          echo "Aguardando NLB ser provisionado pelo ingress-nginx..."
+          for i in $(seq 1 24); do
+            NLB=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            if [ -n "$NLB" ]; then
+              echo ""
+              echo "═════════════════════════════════════════════════════════"
+              echo "  NLB provisionado! URL base dos microsserviços:"
+              echo ""
+              echo "  http://${NLB}"
+              echo ""
+              echo "  Exemplos de uso:"
+              echo "  curl http://${NLB}/auth/health"
+              echo "  curl http://${NLB}/flags/health"
+              echo "  curl http://${NLB}/evaluation/health"
+              echo ""
+              echo "  Aguarde ~60s para o DNS propagar antes de testar."
+              echo "═════════════════════════════════════════════════════════"
+              break
+            fi
+            echo "  tentativa $i/24 — NLB ainda provisionando, aguardando 10s..."
+            sleep 10
+          done
 
       - name: Mascarar senha do ArgoCD nos logs
         run: |

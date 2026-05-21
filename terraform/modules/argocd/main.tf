@@ -84,7 +84,7 @@ resource "helm_release" "argocd" {
 # O ArgoCD vai monitorar o repo GitOps e sincronizar tudo automaticamente.
 # -----------------------------------------------------------------------------
 resource "kubectl_manifest" "applications" {
-  for_each = toset(["auth", "flag", "targeting", "evaluation", "analytics"]) # Ajuste para sua variável de loop
+  for_each = toset(var.services)
 
   yaml_body = <<YAML
 apiVersion: argoproj.io/v1alpha1
@@ -101,6 +101,47 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: ${each.key}-namespace
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+YAML
+
+  depends_on = [helm_release.argocd]
+}
+
+# -----------------------------------------------------------------------------
+# Application do Ingress — sincroniza os manifests de Ingress e os
+# ExternalName Services do namespace `togglemaster-edge`.
+# Separado das 5 apps de serviço porque aponta para um path diferente
+# e não tem namespace de destino igual ao nome do serviço.
+# -----------------------------------------------------------------------------
+resource "kubectl_manifest" "ingress_app" {
+  yaml_body = <<YAML
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: togglemaster-ingress
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ${var.gitops_repo_url}
+    targetRevision: ${var.gitops_revision}
+    path: gitops/base/ingress
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: togglemaster-edge
   syncPolicy:
     automated:
       prune: true

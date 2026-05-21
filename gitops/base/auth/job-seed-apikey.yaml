@@ -1,0 +1,87 @@
+# =============================================================================
+# job-seed-apikey — registra o SERVICE_API_KEY do evaluation-service
+# no banco do auth-service, para que chamadas inter-serviço funcionem.
+#
+# Problema resolvido:
+#   O evaluation-service usa SERVICE_API_KEY para chamar flag/targeting.
+#   Esses serviços validam a chave via auth-service /validate.
+#   Sem este Job, a chave nunca é inserida no banco e todas as chamadas
+#   do evaluation retornam 401.
+#
+# Fluxo:
+#   1. initContainer aguarda auth-service /health responder 200
+#   2. container `seed` faz POST /admin/keys passando name + key
+#   3. auth-service armazena o hash da chave no banco
+#   4. evaluation-service passa nos checks de auth a partir daí
+#
+# Idempotência: 409 (nome duplicado) é tratado como sucesso.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth-seed-apikey
+  namespace: auth-namespace
+  annotations:
+    # Garante que o ArgoCD não recria o Job se ele já completou com sucesso.
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-auth
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Aguardando auth-service estar pronto..."
+              until wget -qO- \
+                http://auth-service.auth-namespace.svc.cluster.local:8001/health \
+                2>/dev/null | grep -q "ok"; do
+                echo "  ainda não pronto, aguardando 5s..."
+                sleep 5
+              done
+              echo "auth-service pronto."
+      containers:
+        - name: seed
+          image: curlimages/curl:8.7.1
+          command:
+            - sh
+            - -c
+            - |
+              AUTH_URL="http://auth-service.auth-namespace.svc.cluster.local:8001"
+
+              echo "Registrando SERVICE_API_KEY no auth-service..."
+              HTTP_STATUS=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
+                -X POST "${AUTH_URL}/admin/keys" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer ${MASTER_KEY}" \
+                -d "{\"name\":\"evaluation-service\",\"key\":\"${SERVICE_API_KEY}\"}")
+
+              echo "HTTP status: ${HTTP_STATUS}"
+              cat /tmp/resp.txt ; echo
+
+              # 201 = criado ; 409 = já existia (idempotente)
+              if [ "${HTTP_STATUS}" = "201" ] || [ "${HTTP_STATUS}" = "409" ]; then
+                echo "SERVICE_API_KEY registrado com sucesso (ou já existia)."
+                exit 0
+              fi
+
+              echo "Falha ao registrar SERVICE_API_KEY (status ${HTTP_STATUS})."
+              exit 1
+          env:
+            - name: MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auth-extra-secret
+                  key: MASTER_KEY
+            # SERVICE_API_KEY é copiado para auth-namespace pelo módulo
+            # k8s-bootstrap (secret: evaluation-service-apikey).
+            - name: SERVICE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: evaluation-service-apikey
+                  key: SERVICE_API_KEY

@@ -1,10 +1,29 @@
-# Stage 1: Build (instala dependências)
+# =============================================================================
+# Dockerfile — analytics-service (Python 3.11)
+#
+# Correções aplicadas:
+#  - Pacotes instalados em /app/.local (não /root/.local) via --prefix.
+#  - Usuário não-root (app:app) no runtime — corrige gosec/Trivy HIGH.
+#  - CMD usa gunicorn.
+#
+# Nota sobre o worker SQS:
+#   O analytics-service inicia uma thread de background (start_worker())
+#   no nível do módulo. Quando gunicorn carrega `app:app`, o módulo é
+#   importado uma vez por worker — a thread SQS sobe junto.
+#   Com 2 workers sync haverá 2 threads SQS consumindo a mesma fila:
+#   isso é intencional e seguro pois cada mensagem só é entregue a um
+#   consumer (visibilityTimeout=60s). Para ambientes de produção real,
+#   considere usar preload_app=True (1 worker+thread) ou separar o
+#   consumer em um Deployment dedicado.
+# =============================================================================
+
+# Stage 1: Build
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/app/.local -r requirements.txt
 
 # Stage 2: Runtime
 FROM python:3.11-slim
@@ -12,18 +31,23 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r app && useradd -r -g app -d /app app \
+    && chown -R app:app /app
 
-COPY . .
+COPY --from=builder --chown=app:app /app/.local /app/.local
+COPY --chown=app:app . .
 
-COPY --from=builder /root/.local /root/.local
+ENV PATH=/app/.local/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-ENV PATH=/root/.local/bin:$PATH
+USER app
 
 EXPOSE 8005
 
-CMD ["python", "app.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8005", "--workers", "2", \
+     "--timeout", "30", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
 
-# Healthcheck — porta 8005 (analytics-service)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8005/health || exit 1

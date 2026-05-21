@@ -4,12 +4,6 @@ variable "services" {
   default     = ["auth", "flag", "targeting", "evaluation", "analytics"]
 }
 
-variable "db_services" {
-  description = "Subconjunto de serviços que precisam de DATABASE_URL (têm RDS dedicado)."
-  type        = list(string)
-  default     = ["auth", "flag", "targeting"]
-}
-
 variable "db_names" {
   description = "Nomes dos DBs."
   type        = list(string)

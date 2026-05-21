@@ -30,6 +30,11 @@ output "dynamodb_table" {
   value = module.dynamodb.table_name
 }
 
+output "nlb_dns_command" {
+  description = "Comando para obter o DNS do NLB criado pelo ingress-nginx."
+  value       = "kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'"
+}
+
 output "argocd_initial_admin_password_command" {
   description = "Comando para obter a senha inicial do admin do ArgoCD."
   value       = "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
@@ -37,5 +42,5 @@ output "argocd_initial_admin_password_command" {
 
 output "argocd_port_forward_command" {
   description = "Comando para acessar a UI do ArgoCD localmente."
-  value       = "kubectl -n argocd port-forward svc/argocd-server 8080:443"
+  value       = "kubectl -n argocd port-forward svc/argocd-server 8080:80"
 }

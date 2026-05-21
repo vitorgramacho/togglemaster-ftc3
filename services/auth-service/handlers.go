@@ -10,6 +10,11 @@ import (
 // Estrutura para o corpo da requisição de criação de chave
 type CreateKeyRequest struct {
 	Name string `json:"name"`
+	// Key é opcional. Quando fornecido (ex: pelo Job de seed do evaluation-service),
+	// a chave exata é armazenada (em hash) em vez de gerar uma aleatória.
+	// Isso permite que o Terraform injete o SERVICE_API_KEY e o registre
+	// no banco numa única operação idempotente.
+	Key string `json:"key,omitempty"`
 }
 
 // Estrutura para a resposta da criação de chave
@@ -80,11 +85,19 @@ func (a *App) createKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Gera uma nova chave e seu hash
-	newKey, err := generateAPIKey()
-	if err != nil {
-		http.Error(w, "Erro ao gerar a chave", http.StatusInternalServerError)
-		return
+	// Gera uma nova chave (ou usa a fornecida no body) e calcula seu hash
+	var newKey string
+	var err error
+	if req.Key != "" {
+		// Chave fornecida externamente (ex: seed do evaluation-service via Job K8s).
+		// Apenas validamos o formato mínimo e usamos diretamente.
+		newKey = req.Key
+	} else {
+		newKey, err = generateAPIKey()
+		if err != nil {
+			http.Error(w, "Erro ao gerar a chave", http.StatusInternalServerError)
+			return
+		}
 	}
 	newKeyHash := hashAPIKey(newKey)
 

@@ -112,16 +112,18 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: golangci-lint
+      - name: go mod tidy (Go)
         if: inputs.language == 'go'
         working-directory: services/${{ inputs.service }}-service
-        run: |
-          # Instala golangci-lint a partir do source usando o Go 1.25 do runner.
-          # O binário pré-compilado da action v6 foi buildado com Go 1.24
-          # e não consegue analisar projetos com "go 1.25" no go.mod.
-          go mod tidy
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          golangci-lint run --timeout=5m
+        run: go mod tidy
+
+      - name: golangci-lint (Go)
+        if: inputs.language == 'go'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          working-directory: services/${{ inputs.service }}-service
+          args: --timeout=5m
 
       - name: Setup Python
         if: inputs.language == 'python'
@@ -203,7 +205,7 @@ jobs:
           # -lll = só reporta severity HIGH. Sai com código != 0 se achar.
           bandit -r . -lll -x ./tests || EXIT=$?
           if [ "${EXIT:-0}" -ne 0 ]; then
-            echo "::error::bandit encontrou vulnerabilidades CRITICAL/HIGH."
+            echo "::error::bandit encontrou vulnerabilidades com severity HIGH ou superior."
             exit 1
           fi
 
@@ -308,11 +310,21 @@ jobs:
           fi
           git add "${{ inputs.gitops_path }}"
           git commit -m "chore(gitops): bump ${{ inputs.service }} image to ${{ needs.docker.outputs.image_tag }}"
-          
-          # 3. Estratégia Anti-Conflito: Rebase
-          # O --rebase garante que o seu commit seja colocado no topo dos commits
-          # feitos por outros serviços (ex: auth, flag) que terminaram enquanto este rodava.
-          git pull --rebase origin main
-          
-          # 4. Push final
-          git push origin main
+
+          # Estratégia anti-conflito com retry:
+          # Quando vários serviços terminam em paralelo e todos tentam fazer
+          # push ao mesmo tempo, o segundo a chegar recebe "rejected" mesmo
+          # após o rebase. O loop abaixo tenta até 5 vezes com backoff
+          # progressivo, garantindo que todos os serviços eventualmente
+          # escrevam suas tags — sem falha de pipeline por race condition.
+          MAX_RETRIES=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            git pull --rebase origin main && git push origin main && break
+            if [ $i -eq $MAX_RETRIES ]; then
+              echo "::error::Falha ao fazer push após ${MAX_RETRIES} tentativas."
+              exit 1
+            fi
+            SLEEP=$((i * 5))
+            echo "Tentativa ${i} falhou — aguardando ${SLEEP}s antes de tentar novamente..."
+            sleep $SLEEP
+          done
