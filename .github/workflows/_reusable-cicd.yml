@@ -63,7 +63,7 @@ jobs:
         if: inputs.language == 'go'
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.23'
 
       - name: Go build + test
         if: inputs.language == 'go'
@@ -110,7 +110,7 @@ jobs:
         if: inputs.language == 'go'
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.23'
 
       - name: go mod tidy (Go)
         if: inputs.language == 'go'
@@ -164,7 +164,7 @@ jobs:
         if: inputs.language == 'go'
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.23'
 
       - name: SAST — gosec (Go)
         if: inputs.language == 'go'
