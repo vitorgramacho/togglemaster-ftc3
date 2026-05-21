@@ -119,6 +119,7 @@ jobs:
 
       - name: golangci-lint (Go)
         if: inputs.language == 'go'
+        working-directory: services/${{ inputs.service }}-service
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
           golangci-lint run --timeout=5m
