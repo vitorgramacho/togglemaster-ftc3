@@ -12,12 +12,20 @@ spec:
     spec:
       containers:
         - name: evaluation-service
-          image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:v1.0.0-a5781a5
+          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:v1.0.0-6d27a8f
           imagePullPolicy: Always
           ports: [ { containerPort: 8004 } ]
+          # aws-credentials injeta AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e
+          # AWS_SESSION_TOKEN necessários para o SDK chamar SQS.
+          # No AWS Academy os nodes EKS não herdam credenciais via Instance Profile,
+          # então as credenciais precisam ser fornecidas explicitamente.
+          # O secret é criado manualmente: kubectl create secret generic aws-credentials ...
+          envFrom:
+            - secretRef:
+                name: aws-credentials
+                optional: true   # não quebra o pod se o secret ainda não existir
           env:
             - { name: PORT, value: "8004" }
-            # REDIS_URL completo (redis://host:port) — vem do Terraform.
             - name: REDIS_URL
               valueFrom: { configMapKeyRef: { name: togglemaster-config, key: REDIS_URL } }
             - name: FLAG_SERVICE_URL
@@ -35,3 +43,4 @@ spec:
             limits:   { cpu: "500m", memory: "512Mi" }
           readinessProbe: { httpGet: { path: /health, port: 8004 }, initialDelaySeconds: 10, periodSeconds: 5 }
           livenessProbe:  { httpGet: { path: /health, port: 8004 }, initialDelaySeconds: 30, periodSeconds: 15 }
+
