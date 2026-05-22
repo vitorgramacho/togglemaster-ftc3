@@ -33,15 +33,26 @@ if not all([AWS_REGION, SQS_QUEUE_URL, DYNAMODB_TABLE_NAME]):
 try:
     LOCALSTACK_ENDPOINT = os.getenv("LOCALSTACK_ENDPOINT")
 
+    # Cria uma sessão boto3 explícita lendo as credenciais dos env vars.
+    # Isso garante que AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e
+    # AWS_SESSION_TOKEN (injetados pelo Secret K8s via envFrom) sejam
+    # usados mesmo quando o pod não tem Instance Profile (AWS Academy).
+    session = boto3.Session(
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
+        region_name=AWS_REGION,
+    )
+
     if LOCALSTACK_ENDPOINT:
         # Se a variável estiver definida, usa LocalStack (prioridade local)
-        sqs_client = boto3.client("sqs", region_name=AWS_REGION, endpoint_url=LOCALSTACK_ENDPOINT)
-        dynamodb_client = boto3.client("dynamodb", region_name=AWS_REGION, endpoint_url=LOCALSTACK_ENDPOINT)
+        sqs_client = session.client("sqs", endpoint_url=LOCALSTACK_ENDPOINT)
+        dynamodb_client = session.client("dynamodb", endpoint_url=LOCALSTACK_ENDPOINT)
         log.info(f"Clientes Boto3 inicializados em LocalStack ({LOCALSTACK_ENDPOINT})")
     else:
         # Caso contrário, conecta à AWS real
-        sqs_client = boto3.client("sqs", region_name=AWS_REGION)
-        dynamodb_client = boto3.client("dynamodb", region_name=AWS_REGION)
+        sqs_client = session.client("sqs")
+        dynamodb_client = session.client("dynamodb")
         log.info(f"Clientes Boto3 inicializados na AWS região {AWS_REGION}")
 
 except NoCredentialsError:
