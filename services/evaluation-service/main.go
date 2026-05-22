@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
@@ -86,10 +87,25 @@ func main() {
 	log.Println("Conectado ao Redis com sucesso!")
 
 	// 2. Cliente SQS — migrado para aws-sdk-go-v2 (v1 está EOL desde 31/jul/2025).
+	// Usa credenciais estáticas dos env vars quando disponíveis, evitando o
+	// timeout do IMDS no AWS Academy (nodes sem Instance Profile).
 	var sqsClient *sqs.Client
 	if sqsQueueURL != "" {
 		cfgOpts := []func(*config.LoadOptions) error{
 			config.WithRegion(awsRegion),
+		}
+
+		accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+		secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+		sessionToken := os.Getenv("AWS_SESSION_TOKEN")
+
+		if accessKey != "" && secretKey != "" {
+			cfgOpts = append(cfgOpts,
+				config.WithCredentialsProvider(
+					credentials.NewStaticCredentialsProvider(accessKey, secretKey, sessionToken),
+				),
+			)
+			log.Println("SQS: usando credenciais estáticas dos env vars.")
 		}
 
 		// LocalStack: se LOCALSTACK_ENDPOINT estiver setado, usamos endpoint custom
