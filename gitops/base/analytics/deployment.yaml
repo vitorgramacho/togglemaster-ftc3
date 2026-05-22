@@ -12,9 +12,15 @@ spec:
     spec:
       containers:
         - name: analytics-service
-          image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-analytics:v1.0.0-a5781a5
+          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-analytics:v1.0.0-6d27a8f
           imagePullPolicy: Always
           ports: [ { containerPort: 8005 } ]
+          # aws-credentials injeta AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e
+          # AWS_SESSION_TOKEN necessários para o SDK chamar SQS e DynamoDB.
+          envFrom:
+            - secretRef:
+                name: aws-credentials
+                optional: true
           env:
             - { name: PORT, value: "8005" }
             - name: REDIS_URL
