@@ -1,4 +1,4 @@
-# evaluation-service (Go)
+# evaluation-service (Go).
 
 Este é o serviço de avaliação, o "caminho quente" (hot path) do projeto ToggleMaster. É o único endpoint que os clientes finais (ex: seu app mobile, seu site) devem chamar.
 

@@ -1,4 +1,4 @@
-# flag-service (Python)
+# flag-service (Python).
 
 Este é o serviço de CRUD (Create, Read, Update, Delete) do projeto ToggleMaster. Ele é responsável por gerenciar as *definições* das feature flags.
 

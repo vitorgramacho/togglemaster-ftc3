@@ -1,4 +1,4 @@
-# analytics-service (Python)
+# analytics-service (Python).
 
 Este é o serviço de análise (analytics) do projeto ToggleMaster. Ele é um *worker* de backend e não possui uma API pública (exceto `/health`).
 
