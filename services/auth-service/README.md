@@ -1,4 +1,4 @@
-# auth-service (Go)..
+# auth-service (Go)
 
 Este é o serviço de autenticação do projeto ToggleMaster. Ele é responsável por criar e validar chaves de API.
 
