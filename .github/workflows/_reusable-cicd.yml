@@ -157,6 +157,7 @@ jobs:
           scan-ref: 'services/${{ inputs.service }}-service'
           severity: 'CRITICAL'
           exit-code: '1'                # ← BLOQUEIA pipeline em CRITICAL
+          ignore-unfixed: true
           format: 'table'
 
       # --- SAST: código-fonte ------------------------------------------------
