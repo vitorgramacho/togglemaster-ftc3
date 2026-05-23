@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crypto/sha256"
+	"crypto/sha1"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -238,7 +238,8 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 // getDeterministicBucket distribui usuários determinísticamente em buckets [0..99].
 // Usa SHA-256 — distribuição uniforme sem uso criptográfico.
 func getDeterministicBucket(input string) int {
-	hash := sha256.Sum256([]byte(input))
+	hash := sha1.Sum([]byte(input))
 	val := binary.BigEndian.Uint32(hash[:4])
 	return int(val % 100)
 }
+
