@@ -230,7 +230,7 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ inputs.aws_region }}chore: testando lint/security scan
+          aws-region: ${{ inputs.aws_region }}
 
       - name: Login to Amazon ECR
         id: ecr-login
@@ -260,7 +260,7 @@ jobs:
           image-ref: ${{ steps.tag.outputs.uri }}
           severity: 'CRITICAL'
           exit-code: '1'
-          ignore-unfixed: true
+          # ignore-unfixed: true
           format: 'table'
 
       - name: Push to ECR
