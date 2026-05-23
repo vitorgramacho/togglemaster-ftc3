@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"fmt"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registra o driver pgx .
 	"github.com/joho/godotenv"
@@ -19,6 +20,7 @@ type App struct {
 }
 
 func main() {
+	fmt.Println("Iniciando o microsserviço com suporte a tokens...")
 	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.   
 	_ = godotenv.Load()
 
