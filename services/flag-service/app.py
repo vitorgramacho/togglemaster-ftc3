@@ -10,7 +10,6 @@ from functools import wraps
 import logging
 import subprocess
 import subprocess
-import subprocess
 
 # Configura o logging
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +19,6 @@ log = logging.getLogger(__name__)
 load_dotenv()
 
 app = Flask(__name__)
-subprocess.call('echo flag-service iniciado', shell=True)
 subprocess.call('echo flag-service iniciado', shell=True)
 subprocess.call('echo flag-service iniciado', shell=True)
 
@@ -251,6 +249,5 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port, debug=False)
 
 # rebuild 2026-05-23 13:09:09
-
 
 
