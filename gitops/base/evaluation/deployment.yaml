@@ -12,7 +12,7 @@ spec:
     spec:
       containers:
         - name: evaluation-service
-          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:v1.0.0-3e82efe
+          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:v1.0.0-afe001a
           imagePullPolicy: Always
           ports: [ { containerPort: 8004 } ]
           # aws-credentials injeta AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e
