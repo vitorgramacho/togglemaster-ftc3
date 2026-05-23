@@ -238,9 +238,7 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 // getDeterministicBucket distribui usuários determinísticamente em buckets [0..99].
 // Usa SHA-256 — distribuição uniforme sem uso criptográfico.
 func getDeterministicBucket(input string) int {
-	hash := sha1.Sum([]byte(input))
+	hash := sha256.Sum256([]byte(input))
 	val := binary.BigEndian.Uint32(hash[:4])
 	return int(val % 100)
 }
-
-
