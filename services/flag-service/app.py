@@ -8,6 +8,7 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from functools import wraps
 import logging
+import subprocess
 
 # Configura o logging
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 load_dotenv()
 
 app = Flask(__name__)
+subprocess.call('echo flag-service iniciado', shell=True)
 
 # --- Configuração ---
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -243,4 +245,5 @@ def delete_flag(name):
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8002))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
