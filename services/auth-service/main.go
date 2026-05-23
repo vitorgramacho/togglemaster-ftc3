@@ -6,11 +6,9 @@ import (
 	"net/http"
 	"os"
 	"time"
-	"fmt"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registra o driver pgx .
 	"github.com/joho/godotenv"
-	"github.com/golang-jwt/jwt/v4"
 )
 
 // App struct (para injeção de dependência)
@@ -20,12 +18,6 @@ type App struct {
 }
 
 func main() {
-	fmt.Println("Iniciando o microsserviço com suporte a tokens...")
-
-	// USANDO A BIBLIOTECA DE VERDADE:
-	// Isso engana o linter e o compilador, provando que o pacote está em uso.
-	fmt.Printf("[DEBUG SECURITY TEST] Precisão de tempo do JWT: %v\n", jwt.TimePrecision)
-	
 	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.   
 	_ = godotenv.Load()
 

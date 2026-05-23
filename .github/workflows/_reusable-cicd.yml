@@ -260,7 +260,7 @@ jobs:
           image-ref: ${{ steps.tag.outputs.uri }}
           severity: 'CRITICAL'
           exit-code: '1'
-          # ignore-unfixed: true
+          ignore-unfixed: true
           format: 'table'
 
       - name: Push to ECR

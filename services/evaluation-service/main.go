@@ -29,7 +29,6 @@ type App struct {
 }
 
 func main() {
-	return
 	_ = godotenv.Load() // Carrega .env para dev local.
 
 	// --- Configuração ---
