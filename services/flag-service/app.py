@@ -7,7 +7,6 @@ from psycopg2.pool import SimpleConnectionPool
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from functools import wraps
-import logging
 import subprocess
 
 # Configura o logging
@@ -18,7 +17,6 @@ log = logging.getLogger(__name__)
 load_dotenv()
 
 app = Flask(__name__)
-subprocess.call('echo flag-service iniciado', shell=True)
 
 # --- Configuração ---
 DATABASE_URL = os.getenv("DATABASE_URL")
