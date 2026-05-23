@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -242,4 +242,5 @@ func getDeterministicBucket(input string) int {
 	val := binary.BigEndian.Uint32(hash[:4])
 	return int(val % 100)
 }
+
 
