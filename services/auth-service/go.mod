@@ -3,6 +3,7 @@ module auth-service
 go 1.25.0
 
 require (
+	github.com/golang-jwt/jwt/v4 v4.5.0 // 👈 COLOQUE ESTA VERSÃO ESPECÍFICA
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/joho/godotenv v1.5.1
 )

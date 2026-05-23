@@ -9,6 +9,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registra o driver pgx .
 	"github.com/joho/godotenv"
+	"github.com/golang-jwt/jwt/v4"
 )
 
 // App struct (para injeção de dependência)
