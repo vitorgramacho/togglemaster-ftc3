@@ -31,7 +31,7 @@ spec:
       containers:
         - name: auth-service
           # ESTA LINHA É ATUALIZADA AUTOMATICAMENTE PELO CI (sed).
-          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-auth:v1.0.0-5806600
+          image: 426928407991.dkr.ecr.us-east-1.amazonaws.com/togglemaster-auth:v1.0.0-d2a41c9
           imagePullPolicy: Always
           ports:
             - containerPort: 8001
