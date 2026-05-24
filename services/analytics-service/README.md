@@ -1,6 +1,6 @@
 # analytics-service (Python)
 
-Este é o serviço de análise (analytics) do projeto ToggleMaster. Ele é um *worker* de backend e não possui uma API pública (exceto `/health`).
+Este é o serviço de análise (analytics) do projeto ToggleMaster. Ele é um *worker* de backend e não possui uma API pública (exceto `/health`)
 
 Sua única função é:
 1.  Ouvir constantemente a fila do **AWS SQS** (que o `evaluation-service` preenche).
