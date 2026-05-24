@@ -1,7 +1,7 @@
 # =============================================================================
 # Workflow reutilizável — ToggleMaster CI/CD por microsserviço
 #
-# Este workflow é chamado pelos 5 workflows leves (ci-<service>.yml).
+# Este workflow é chamado pelos 5 workflows  (ci-<service>.yml).
 # Estágios (jobs):
 #   1) build-test         → compila e roda testes unitários
 #   2) lint               → golangci-lint (Go) ou flake8 (Python)
@@ -41,12 +41,12 @@ on:
       AWS_SECRET_ACCESS_KEY:
         required: true
       AWS_SESSION_TOKEN:
-        required: false # opcional (necessário em AWS Academy)
+        required: false 
       GITOPS_TOKEN:
-        required: false # PAT para escrever no repo GitOps (se for repo separado)
+        required: false 
 
 permissions:
-  contents: write       # precisa para commit no repo GitOps
+  contents: write       
   security-events: write
 
 jobs:
@@ -140,7 +140,6 @@ jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
   # 3) SECURITY SCAN (SAST + SCA)
-  #    Aqui está a "Regra de Bloqueio" do desafio: exit-code=1 em CRITICAL..
   # ───────────────────────────────────────────────────────────────────────────
   security:
     name: Security Scan (SAST + SCA)
@@ -281,9 +280,6 @@ jobs:
       - name: Checkout repo (com permissão de write)
         uses: actions/checkout@v4
         with:
-          # Se o repo GitOps for o MESMO deste serviço (monorepo), o
-          # GITHUB_TOKEN padrão basta. Se for separado, use um PAT em
-          # secrets.GITOPS_TOKEN e ajuste o `repository` aqui.
           token: ${{ secrets.GITOPS_TOKEN || github.token }}
           fetch-depth: 0
 
