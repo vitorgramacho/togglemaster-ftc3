@@ -1,16 +1,5 @@
-# =============================================================================
 # auth-service — Deployment
-#
-# Correções vs versão anterior:
-# - Lê DATABASE_URL diretamente do Secret `togglemaster-db-secret` criado
-#   pelo Terraform (módulo k8s-bootstrap). O app já espera essa env var.
-# - Lê MASTER_KEY do Secret `auth-extra-secret` (também criado pelo TF).
-# - A imagem usa o placeholder `:latest` que é REESCRITO pelo CI a cada push
-#   na main (passo update-gitops -> sed -i ...image: ...).
-# - Account ID NÃO mais hardcoded: o registry é injetado pelo CI no momento
-#   do bump. Aqui deixamos um valor inicial qualquer; o ArgoCD vai aplicar
-#   o que o CI atualizar.
-# =============================================================================
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
