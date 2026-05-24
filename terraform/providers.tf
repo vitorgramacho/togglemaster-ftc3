@@ -6,11 +6,6 @@ provider "aws" {
   }
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Os providers Kubernetes/Helm precisam autenticar contra o cluster EKS criado.
-# Usamos a função `exec` chamando `aws eks get-token` em vez do data source
-# (que avaliaria no plan e quebraria quando o cluster ainda não existe).
-# ─────────────────────────────────────────────────────────────────────────────
 
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
