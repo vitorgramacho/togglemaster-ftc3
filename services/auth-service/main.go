@@ -17,13 +17,12 @@ type App struct {
 }
 
 func main() {
-	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.   
 	_ = godotenv.Load()
 
-	// --- Configuração ---
+
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8001" // Porta padrão
+		port = "8001"
 	}
 
 	databaseURL := os.Getenv("DATABASE_URL")
