@@ -77,7 +77,7 @@ def create_rule():
         return jsonify({"error": "'flag_name' e 'rules' (JSON) são obrigatórios"}), 400
     
     flag_name = data['flag_name']
-    rules_obj = data['rules'] # O objeto JSON
+    rules_obj = data['rules']
     is_enabled = data.get('is_enabled', True)
     
     conn = None
@@ -88,7 +88,7 @@ def create_rule():
         cur.execute(
             "INSERT INTO targeting_rules (flag_name, is_enabled, rules, created_at, updated_at) "
             "VALUES (%s, %s, %s, NOW(), NOW()) RETURNING *",
-            (flag_name, is_enabled, Json(rules_obj)) # Usa Json() para serializar
+            (flag_name, is_enabled, Json(rules_obj))
         )
         new_rule = cur.fetchone()
         conn.commit()
@@ -140,7 +140,7 @@ def update_rule(flag_name):
     
     if 'rules' in data:
         fields.append("rules = %s")
-        values.append(Json(data['rules'])) # Serializa o JSON
+        values.append(Json(data['rules']))
     if 'is_enabled' in data:
         fields.append("is_enabled = %s")
         values.append(data['is_enabled'])
@@ -148,7 +148,7 @@ def update_rule(flag_name):
     if not fields:
         return jsonify({"error": "Pelo menos um campo ('rules', 'is_enabled') é obrigatório"}), 400
     
-    values.append(flag_name) # Adiciona o 'flag_name' para a cláusula WHERE
+    values.append(flag_name)
     
     query = f"UPDATE targeting_rules SET {', '.join(fields)} WHERE flag_name = %s RETURNING *"
     
@@ -202,4 +202,4 @@ def delete_rule(flag_name):
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8003))
     app.run(host='0.0.0.0', port=port, debug=False)
-# rebuild 2026-05-23 13:09:09
+
