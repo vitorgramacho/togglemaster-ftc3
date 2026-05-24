@@ -1,22 +1,3 @@
-# =============================================================================
-# Dockerfile — analytics-service (Python 3.11)
-#
-# Correções aplicadas:
-#  - Pacotes instalados em /app/.local (não /root/.local) via --prefix.
-#  - Usuário não-root (app:app) no runtime — corrige gosec/Trivy HIGH.
-#  - CMD usa gunicorn.
-#
-# Nota sobre o worker SQS:
-#   O analytics-service inicia uma thread de background (start_worker())
-#   no nível do módulo. Quando gunicorn carrega `app:app`, o módulo é
-#   importado uma vez por worker — a thread SQS sobe junto.
-#   Com 2 workers sync haverá 2 threads SQS consumindo a mesma fila:
-#   isso é intencional e seguro pois cada mensagem só é entregue a um
-#   consumer (visibilityTimeout=60s). Para ambientes de produção real,
-#   considere usar preload_app=True (1 worker+thread) ou separar o
-#   consumer em um Deployment dedicado.
-# =============================================================================
-
 # Stage 1: Build
 FROM python:3.11-slim AS builder
 
