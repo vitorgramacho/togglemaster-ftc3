@@ -28,11 +28,9 @@ if not all([AWS_REGION, SQS_QUEUE_URL, DYNAMODB_TABLE_NAME]):
     sys.exit(1)
 
 
-# --- Clientes Boto3 ---
 try:
     LOCALSTACK_ENDPOINT = os.getenv("LOCALSTACK_ENDPOINT")
 
-    # Cria uma sessão boto3 explícita lendo as credenciais dos env vars.
     session = boto3.Session(
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
@@ -41,7 +39,6 @@ try:
     )
 
     if LOCALSTACK_ENDPOINT:
-        # Se a variável estiver definida, usa LocalStack (prioridade local)
         sqs_client = session.client("sqs", endpoint_url=LOCALSTACK_ENDPOINT)
         dynamodb_client = session.client("dynamodb", endpoint_url=LOCALSTACK_ENDPOINT)
         log.info(f"Clientes Boto3 inicializados em LocalStack ({LOCALSTACK_ENDPOINT})")
@@ -134,7 +131,6 @@ app = Flask(__name__)
 
 @app.route('/health')
 def health():
-    # Uma verificação de saúde real poderia checar a conexão com o DynamoDB/SQS
     return jsonify({"status": "ok"})
 
 
