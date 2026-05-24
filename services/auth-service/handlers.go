@@ -7,13 +7,8 @@ import (
 	"strings"
 )
 
-// Estrutura para o corpo da requisição de criação de chave
 type CreateKeyRequest struct {
 	Name string `json:"name"`
-	// Key é opcional. Quando fornecido (ex: pelo Job de seed do evaluation-service),
-	// a chave exata é armazenada (em hash) em vez de gerar uma aleatória.
-	// Isso permite que o Terraform injete o SERVICE_API_KEY e o registre
-	// no banco numa única operação idempotente.
 	Key string `json:"key,omitempty"`
 }
 
