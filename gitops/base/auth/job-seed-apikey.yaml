@@ -2,19 +2,6 @@
 # job-seed-apikey — registra o SERVICE_API_KEY do evaluation-service
 # no banco do auth-service, para que chamadas inter-serviço funcionem.
 #
-# Problema resolvido:
-#   O evaluation-service usa SERVICE_API_KEY para chamar flag/targeting.
-#   Esses serviços validam a chave via auth-service /validate.
-#   Sem este Job, a chave nunca é inserida no banco e todas as chamadas
-#   do evaluation retornam 401.
-#
-# Fluxo:
-#   1. initContainer aguarda auth-service /health responder 200
-#   2. container `seed` faz POST /admin/keys passando name + key
-#   3. auth-service armazena o hash da chave no banco
-#   4. evaluation-service passa nos checks de auth a partir daí
-#
-# Idempotência: 409 (nome duplicado) é tratado como sucesso.
 # =============================================================================
 apiVersion: batch/v1
 kind: Job
@@ -64,7 +51,6 @@ spec:
               echo "HTTP status: ${HTTP_STATUS}"
               cat /tmp/resp.txt ; echo
 
-              # 201 = criado ; 409 = já existia (idempotente)
               if [ "${HTTP_STATUS}" = "201" ] || [ "${HTTP_STATUS}" = "409" ]; then
                 echo "SERVICE_API_KEY registrado com sucesso (ou já existia)."
                 exit 0
