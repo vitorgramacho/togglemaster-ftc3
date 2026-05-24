@@ -12,14 +12,12 @@ type CreateKeyRequest struct {
 	Key string `json:"key,omitempty"`
 }
 
-// Estrutura para a resposta da criação de chave
 type CreateKeyResponse struct {
 	Name    string `json:"name"`
-	Key     string `json:"key"` // chave em texto plano retornada APENAS uma vez
+	Key     string `json:"key"` 
 	Message string `json:"message"`
 }
 
-// writeJSON encapsula a serialização e o tratamento de erros de Encode (gosec G104).
 // Manter centralizado evita ignorar erros e facilita a inclusão de métricas no futuro.
 func writeJSON(w http.ResponseWriter, status int, body interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -29,12 +27,10 @@ func writeJSON(w http.ResponseWriter, status int, body interface{}) {
 	}
 }
 
-// healthHandler é um simples endpoint de verificação de saúde
 func (a *App) healthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// validateKeyHandler verifica se uma chave de API (enviada via Header) é válida
 func (a *App) validateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
 	keyString := strings.TrimPrefix(authHeader, "Bearer ")
@@ -44,10 +40,8 @@ func (a *App) validateKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calcula o hash da chave recebida
 	keyHash := hashAPIKey(keyString)
 
-	// Verifica se o hash existe no banco de dados
 	var id int
 	err := a.DB.QueryRow(
 		"SELECT id FROM api_keys WHERE key_hash = $1 AND is_active = true",
@@ -84,8 +78,6 @@ func (a *App) createKeyHandler(w http.ResponseWriter, r *http.Request) {
 	var newKey string
 	var err error
 	if req.Key != "" {
-		// Chave fornecida externamente (ex: seed do evaluation-service via Job K8s).
-		// Apenas validamos o formato mínimo e usamos diretamente.
 		newKey = req.Key
 	} else {
 		newKey, err = generateAPIKey()
@@ -117,9 +109,6 @@ func (a *App) createKeyHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// --- Middleware ---
-
-// masterKeyAuthMiddleware protege endpoints que só podem ser acessados com a MASTER_KEY
 func (a *App) masterKeyAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
