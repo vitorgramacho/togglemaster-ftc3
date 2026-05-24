@@ -7,11 +7,10 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // registra o driver pgx .
+	_ "github.com/jackc/pgx/v5/stdlib" 
 	"github.com/joho/godotenv"
 )
 
-// App struct (para injeção de dependência)
 type App struct {
 	DB        *sql.DB
 	MasterKey string
@@ -59,9 +58,7 @@ func main() {
 	// Endpoints de "admin" protegidos pelo middleware MasterKey
 	mux.Handle("/admin/keys", app.masterKeyAuthMiddleware(http.HandlerFunc(app.createKeyHandler)))
 
-	// SECURITY (gosec G114): http.ListenAndServe sem timeouts deixa o servidor
-	// vulnerável a Slowloris. Construímos explicitamente um http.Server com
-	// ReadHeaderTimeout, ReadTimeout, WriteTimeout e IdleTimeout.
+
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,
