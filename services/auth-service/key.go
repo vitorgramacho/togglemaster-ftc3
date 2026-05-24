@@ -16,9 +16,8 @@ func generateAPIKey() (string, error) {
 	return "tm_key_" + hex.EncodeToString(bytes), nil
 }
 
-// hashAPIKey calcula o hash SHA-256 de uma chave para armazenamento seguro
 func hashAPIKey(key string) string {
 	hash := sha256.Sum256([]byte(key))
-	// Retorna o hash como uma string hexadecimal de 64 caracteres
+	// Retorna o hash como uma string hexadecimal(64 caracteres)
 	return hex.EncodeToString(hash[:])
 }
