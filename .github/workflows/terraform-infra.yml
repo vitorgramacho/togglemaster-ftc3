@@ -1,5 +1,4 @@
 # =============================================================================
-# Terraform Infra — ToggleMaster Fase 3
 #
 # Provisiona toda a infraestrutura AWS necessária para o projeto:
 #   - VPC + subnets + NAT
@@ -23,7 +22,7 @@
 #                            destrói tudo. Usa Environment "production-destroy"
 #                            para forçar aprovação manual.
 #
-# Segredos necessários no repositório (Settings → Secrets → Actions):
+# Segredos utilizados no repositório (Settings → Secrets → Actions):
 #   AWS_ACCESS_KEY_ID
 #   AWS_SECRET_ACCESS_KEY
 #   AWS_SESSION_TOKEN       (AWS Academy — credenciais temporárias)
@@ -51,19 +50,19 @@ on:
     paths:
       - "terraform/**"
 
-# Apenas 1 run de infra por vez — evita corrida no tfstate.
+# Evitar mais de 1 run de infra de vez
 concurrency:
   group: terraform-infra
   cancel-in-progress: false
 
 permissions:
   contents: read
-  pull-requests: write   # comentar plan no PR
+  pull-requests: write   
   id-token: write
 
 env:
   AWS_REGION: us-east-1
-  TF_VERSION: "1.10.0"     # >= 1.10 para suportar use_lockfile
+  TF_VERSION: "1.10.0"     
   WORKING_DIR: ./terraform
 
 jobs:
@@ -433,9 +432,7 @@ jobs:
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
 
-      # Limpa Applications do ArgoCD antes do destroy.
-      # Sem isso, o destroy do node group pode ficar preso esperando
-      # finalização dos pods que o ArgoCD recriaria via selfHeal.
+
       - name: Limpar Applications do ArgoCD
         working-directory: ${{ env.WORKING_DIR }}
         continue-on-error: true
