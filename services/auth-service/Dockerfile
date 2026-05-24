@@ -1,19 +1,3 @@
-# =============================================================================
-# Dockerfile — auth-service
-#
-# Por que Go 1.25:
-#   pgx v5.9.2 exige Go >= 1.25 no go.mod.
-#   Fonte: https://pkg.go.dev/github.com/jackc/pgx/v5
-#
-# Decisões para reduzir vulnerabilidades reportadas pelo Trivy:
-#  - Imagem base 'alpine:3.20' (anteriormente 3.19): menos CVEs HIGH/CRITICAL.
-#  - Builder em 'golang:1.25-alpine' em vez de 'golang:1.24.0' Debian-based.
-#  - Removida instalação de 'curl' no builder (não usado em runtime).
-#  - 'go mod tidy' garante go.sum consistente sem precisar versioná-lo.
-#  - Usuário não-root no runtime.
-# =============================================================================
-
-# Stage 1: Build
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
