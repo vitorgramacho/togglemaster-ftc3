@@ -87,5 +87,3 @@ func connectDB(databaseURL string) (*sql.DB, error) {
 	log.Println("Conectado ao PostgreSQL com sucesso!")
 	return db, nil
 }
-// rebuild 2026-05-23 13:09:09
-// demo 2026-05-23 15:08:33
