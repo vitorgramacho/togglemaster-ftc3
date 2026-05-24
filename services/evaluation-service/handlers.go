@@ -36,10 +36,8 @@ func (a *App) evaluationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Obter a decisão (lógica de cache/serviço está em evaluator.go)
 	result, err := a.getDecision(userID, flagName)
 	if err != nil {
-		// Se for "não encontrado", retornamos 'false' (fail-closed)
 		var nfe *NotFoundError
 		if errors.As(err, &nfe) {
 			result = false
