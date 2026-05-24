@@ -1,6 +1,6 @@
 # =============================================================================
 # Módulo: ArgoCD
-# Instala o ArgoCD no cluster EKS via Helm chart oficial.
+# Instala o ArgoCD no cluster EKS via Helm chart oficial
 #
 # Depois do apply, a UI do ArgoCD fica acessível via port-forward:
 #   kubectl -n argocd port-forward svc/argocd-server 8080:443
