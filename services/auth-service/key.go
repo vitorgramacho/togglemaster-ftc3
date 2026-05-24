@@ -8,16 +8,14 @@ import (
 
 // generateAPIKey cria uma string aleatória segura de 32 bytes
 func generateAPIKey() (string, error) {
-	bytes := make([]byte, 32) // 32 bytes = 256 bits de entropia
+	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
-	// Prefixo para facilitar a identificação da chave
 	return "tm_key_" + hex.EncodeToString(bytes), nil
 }
 
 func hashAPIKey(key string) string {
 	hash := sha256.Sum256([]byte(key))
-	// Retorna o hash como uma string hexadecimal(64 caracteres)
 	return hex.EncodeToString(hash[:])
 }
