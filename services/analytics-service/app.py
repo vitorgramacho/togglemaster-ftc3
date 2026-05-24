@@ -14,12 +14,11 @@ from dotenv import load_dotenv
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-# Carrega .env para desenvolvimento local 
+
 load_dotenv()
 
 
 # --- Configuração ----
-# Adicionadas 2 linhas em branco acima (E302)
 AWS_REGION = os.getenv("AWS_REGION")
 SQS_QUEUE_URL = os.getenv("AWS_SQS_URL")
 DYNAMODB_TABLE_NAME = os.getenv("AWS_DYNAMODB_TABLE")
@@ -34,9 +33,6 @@ try:
     LOCALSTACK_ENDPOINT = os.getenv("LOCALSTACK_ENDPOINT")
 
     # Cria uma sessão boto3 explícita lendo as credenciais dos env vars.
-    # Isso garante que AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e
-    # AWS_SESSION_TOKEN (injetados pelo Secret K8s via envFrom) sejam
-    # usados mesmo quando o pod não tem Instance Profile (AWS Academy).
     session = boto3.Session(
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
@@ -50,7 +46,6 @@ try:
         dynamodb_client = session.client("dynamodb", endpoint_url=LOCALSTACK_ENDPOINT)
         log.info(f"Clientes Boto3 inicializados em LocalStack ({LOCALSTACK_ENDPOINT})")
     else:
-        # Caso contrário, conecta à AWS real
         sqs_client = session.client("sqs")
         dynamodb_client = session.client("dynamodb")
         log.info(f"Clientes Boto3 inicializados na AWS região {AWS_REGION}")
@@ -71,10 +66,8 @@ def process_message(message):
         log.info(f"Processando mensagem ID: {message['MessageId']}")
         body = json.loads(message['Body'])
 
-        # Gera um ID único para o item no DynamoDB
         event_id = str(uuid.uuid4())
 
-        # Constrói o item no formato do DynamoDB
         item = {
             'event_id': {'S': event_id},
             'user_id': {'S': body['user_id']},
@@ -83,7 +76,6 @@ def process_message(message):
             'timestamp': {'S': body['timestamp']}
         }
 
-        # Insere no DynamoDB
         dynamodb_client.put_item(
             TableName=DYNAMODB_TABLE_NAME,
             Item=item
@@ -91,7 +83,6 @@ def process_message(message):
 
         log.info(f"Evento {event_id} (Flag: {body['flag_name']}) salvo no DynamoDB.")
 
-        # Se tudo deu certo, deleta a mensagem da fila
         sqs_client.delete_message(
             QueueUrl=SQS_QUEUE_URL,
             ReceiptHandle=message['ReceiptHandle']
@@ -113,10 +104,9 @@ def sqs_worker_loop():
     log.info("Iniciando o worker SQS...")
     while True:
         try:
-            # Long-polling: espera até 20s por mensagens
             response = sqs_client.receive_message(
                 QueueUrl=SQS_QUEUE_URL,
-                MaxNumberOfMessages=10,  # Processa em lotes de até 10
+                MaxNumberOfMessages=10,  
                 WaitTimeSeconds=20
             )
 
@@ -132,13 +122,12 @@ def sqs_worker_loop():
 
         except ClientError as e:
             log.error(f"Erro do Boto3 no loop principal do SQS: {e}")
-            time.sleep(10)  # Pausa antes de tentar novamente (E261: 2 espaços antes do #)
+            time.sleep(10)
         except Exception as e:
             log.error(f"Erro inesperado no loop principal do SQS: {e}")
             time.sleep(10)
 
 
-# --- Servidor Flask (Apenas para Health Check) ---
 
 app = Flask(__name__)
 
@@ -149,7 +138,6 @@ def health():
     return jsonify({"status": "ok"})
 
 
-# --- Inicialização ---
 
 def start_worker():
     """ Inicia o worker SQS em uma thread separada """
@@ -158,10 +146,8 @@ def start_worker():
 
 
 # Inicia o worker SQS em uma thread de background
-# Isso garante que ele inicie tanto com 'flask run' quanto com 'gunicorn'
 start_worker()
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8005))
     app.run(host='0.0.0.0', port=port, debug=False)
-# rebuild 2026-05-23 13:09:09
