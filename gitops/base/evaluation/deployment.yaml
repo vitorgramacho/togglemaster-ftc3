@@ -17,9 +17,6 @@ spec:
           ports: [ { containerPort: 8004 } ]
           # aws-credentials injeta AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e
           # AWS_SESSION_TOKEN necessários para o SDK chamar SQS.
-          # No AWS Academy os nodes EKS não herdam credenciais via Instance Profile,
-          # então as credenciais precisam ser fornecidas explicitamente.
-          # O secret é criado manualmente: kubectl create secret generic aws-credentials ...
           envFrom:
             - secretRef:
                 name: aws-credentials
