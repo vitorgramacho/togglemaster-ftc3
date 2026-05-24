@@ -1,8 +1,6 @@
 # =============================================================================
 # CI/CD — ToggleMaster Microsserviços (workflow CONSOLIDADO)
 #
-# UM ÚNICO arquivo dispara os 5 pipelines em PARALELO, dentro da MESMA run.
-#
 # Estrutura:
 #   1) detect-changes  → paths-filter identifica quais serviços mudaram
 #   2) ci-auth         → pipeline completo do auth-service (se mudou)
@@ -214,7 +212,6 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════════════════
   # 7) RESUMO — agrega resultado dos 5 jobs.
-  #    Único check obrigatório no branch protection.
   # ═══════════════════════════════════════════════════════════════════════════
   ci-summary:
     name: CI Summary
