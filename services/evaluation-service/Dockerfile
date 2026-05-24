@@ -1,11 +1,3 @@
-# =============================================================================
-# Dockerfile — evaluation-service
-#
-# Go 1.25 padronizado entre todos os serviços Go do projeto (pgx v5.9.2
-# do auth-service exige Go >= 1.25; alinhamos os dois para simplificar
-# o CI e ter uma única versão de toolchain no pipeline).
-# =============================================================================
-
 # Stage 1: Build
 FROM golang:1.25-alpine AS builder
 
@@ -17,7 +9,7 @@ RUN apk add --no-cache git
 COPY go.mod ./
 RUN go mod download || true
 COPY . .
-# go.sum é gerado/atualizado aqui — evita versioná-lo no repo
+
 RUN go mod tidy
 
 # Build estático
