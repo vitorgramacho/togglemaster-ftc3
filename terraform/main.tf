@@ -1,17 +1,6 @@
-# =============================================================================
-# Root Terraform — ToggleMaster Fase 3
-#
-# Ordem de provisionamento (resolvida automaticamente por dependências):
-#   1) Networking (VPC, subnets, IGW, NAT, route tables)
-#   2) ECR (5 repositórios)
-#   3) EKS (cluster + node group) usando LabRole
-#   4) RDS x3 / ElastiCache / DynamoDB / SQS (rodam em paralelo)
-#   5) k8s-bootstrap (namespaces, Secret de DB, ConfigMap, metrics-server)
-#   6) ArgoCD (Helm chart + Application CRDs apontando para gitops)
-# =============================================================================
+
 
 # Data source obrigatório no AWS Academy:
-# Não criamos roles IAM novas — apenas referenciamos a LabRole.
 data "aws_iam_role" "labrole" {
   name = "LabRole"
 }
@@ -97,8 +86,6 @@ module "sqs" {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5) Bootstrap de objetos K8s
-#    (Roda APÓS o node group estar pronto — ver depends_on implícito via
-#    referência ao module.eks.cluster_endpoint nos providers k8s/helm.)
 # ─────────────────────────────────────────────────────────────────────────────
 module "k8s_bootstrap" {
   source = "./modules/k8s-bootstrap"
