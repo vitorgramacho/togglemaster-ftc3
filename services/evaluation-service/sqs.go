@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
-// Evento que será enviado para a fila
 type EvaluationEvent struct {
 	UserID    string    `json:"user_id"`
 	FlagName  string    `json:"flag_name"`
@@ -18,7 +17,6 @@ type EvaluationEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// sendEvaluationEvent envia um evento para a fila SQS (aws-sdk-go-v2).
 func (a *App) sendEvaluationEvent(userID, flagName string, result bool) {
 	if a.SqsClient == nil || a.SqsQueueURL == "" {
 		log.Printf("[SQS_DISABLED] Evento: User '%s', Flag '%s', Result '%t'",
@@ -39,7 +37,6 @@ func (a *App) sendEvaluationEvent(userID, flagName string, result bool) {
 		return
 	}
 
-	// Timeout no contexto para não bloquear a goroutine indefinidamente.
 	sendCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
