@@ -29,7 +29,7 @@ type App struct {
 }
 
 func main() {
-	_ = godotenv.Load() // Carrega .env para dev local.
+	_ = godotenv.Load() 
 
 	// --- Configuração ---
 	port := os.Getenv("PORT")
@@ -52,7 +52,6 @@ func main() {
 		log.Fatal("TARGETING_SERVICE_URL deve ser definida")
 	}
 
-	// SQS é opcional no dev local, mas obrigatório em prod
 	sqsQueueURL := os.Getenv("AWS_SQS_URL")
 	awsRegion := os.Getenv("AWS_REGION")
 	if sqsQueueURL == "" {
@@ -62,19 +61,6 @@ func main() {
 		log.Fatal("AWS_REGION deve ser definida para usar SQS")
 	}
 
-	// --- Inicializa Clientes ---
-
-	// 1. Cliente Redis
-	//
-	// SECURITY (gosec G402): a versão anterior forçava
-	//     tls.Config{InsecureSkipVerify: true}
-	// o que é uma vulnerabilidade HIGH (CWE-295). Removemos completamente.
-	//
-	// O cluster ElastiCache criado pelo Terraform NÃO tem transit_encryption
-	// habilitado, então a conexão é em texto puro dentro da VPC.
-	// Caso futuramente o cluster seja recriado COM TLS, a URL deve passar a
-	// usar o esquema `rediss://`, e o cliente fará TLS com verificação
-	// completa do certificado (sem InsecureSkipVerify).
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
 		log.Fatalf("Não foi possível parsear a URL do Redis: %v", err)
@@ -86,9 +72,7 @@ func main() {
 	}
 	log.Println("Conectado ao Redis com sucesso!")
 
-	// 2. Cliente SQS — migrado para aws-sdk-go-v2 (v1 está EOL desde 31/jul/2025).
-	// Usa credenciais estáticas dos env vars quando disponíveis, evitando o
-	// timeout do IMDS no AWS Academy (nodes sem Instance Profile).
+
 	var sqsClient *sqs.Client
 	if sqsQueueURL != "" {
 		cfgOpts := []func(*config.LoadOptions) error{
@@ -108,8 +92,7 @@ func main() {
 			log.Println("SQS: usando credenciais estáticas dos env vars.")
 		}
 
-		// LocalStack: se LOCALSTACK_ENDPOINT estiver setado, usamos endpoint custom
-		// via BaseEndpoint (modo correto na v2; EndpointResolver foi deprecado).
+
 		localstackEndpoint := os.Getenv("LOCALSTACK_ENDPOINT")
 
 		awsCfg, err := config.LoadDefaultConfig(context.Background(), cfgOpts...)
@@ -126,7 +109,6 @@ func main() {
 		log.Println("Cliente SQS (v2) inicializado com sucesso.")
 	}
 
-	// 3. Cliente HTTP (com timeout)
 	httpClient := &http.Client{
 		Timeout: 5 * time.Second,
 	}
@@ -146,7 +128,6 @@ func main() {
 	mux.HandleFunc("/health", app.healthHandler)
 	mux.HandleFunc("/evaluate", app.evaluationHandler)
 
-	// SECURITY (gosec G114): servidor HTTP com timeouts explícitos.
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,
