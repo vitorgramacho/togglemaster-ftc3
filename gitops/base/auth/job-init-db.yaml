@@ -1,12 +1,6 @@
-# =============================================================================
+
 # auth-postgres-init Job
-#
-# Correções vs versão anterior:
-# 1) Adicionado separador `---` entre Job e ConfigMap (estava faltando).
-# 2) `config_map` -> `configMap` (era typo, manifest inválido).
-# 3) Secret key passou de "DB_PASS_0" para "DB_PASSWORD" (compatível com
-#    o que o módulo k8s-bootstrap do Terraform cria).
-# =============================================================================
+
 apiVersion: batch/v1
 kind: Job
 metadata:
