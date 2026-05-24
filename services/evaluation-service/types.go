@@ -2,7 +2,6 @@ package main
 
 import "fmt"
 
-// --- Estruturas de Dados ---
 
 // Flag espelha a resposta do flag-service
 type Flag struct {
@@ -17,7 +16,7 @@ type TargetingRule struct {
 	ID        int    `json:"id"`
 	FlagName  string `json:"flag_name"`
 	IsEnabled bool   `json:"is_enabled"`
-	Rules     Rule   `json:"rules"` // O objeto JSONB
+	Rules     Rule   `json:"rules"` 
 }
 
 // Rule é o objeto JSONB aninhado
