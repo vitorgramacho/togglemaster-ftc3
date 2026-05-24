@@ -1,12 +1,3 @@
-# =============================================================================
-# Dockerfile — targeting-service (Python 3.11)
-#
-# Correções aplicadas:
-#  - Pacotes instalados em /app/.local (não /root/.local) via --prefix.
-#  - Usuário não-root (app:app) no runtime — corrige gosec/Trivy HIGH.
-#  - CMD usa gunicorn com 2 workers e graceful timeout.
-# =============================================================================
-
 # Stage 1: Build
 FROM python:3.11-slim AS builder
 
