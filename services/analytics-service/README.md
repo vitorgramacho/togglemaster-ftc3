@@ -5,7 +5,7 @@ Este é o serviço de análise (analytics) do projeto ToggleMaster. Ele é um *w
 Sua única função é:
 1.  Ouvir constantemente a fila do **AWS SQS** (que o `evaluation-service` preenche).
 2.  Consumir as mensagens de evento da fila.
-3.  Gravar os dados de análise em uma tabela do **AWS DynamoDB**.
+3.  Gravar os dados de análise em uma tabela do **AWS DynamoDB**
 
 ## 📦 Pré-requisitos (Local)
 
