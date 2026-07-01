@@ -2,13 +2,13 @@ import os
 import sys
 import psycopg2
 import requests
+import logging
+import subprocess
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from functools import wraps
-import logging
-import subprocess
 
 # Configura o logging
 logging.basicConfig(level=logging.INFO)
