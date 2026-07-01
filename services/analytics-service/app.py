@@ -9,6 +9,7 @@ import boto3
 from botocore.exceptions import NoCredentialsError, ClientError
 from flask import Flask, jsonify
 from dotenv import load_dotenv
+from telemetry import init_telemetry
 
 # Configura o logging    
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -129,7 +130,6 @@ app = Flask(__name__)
 # IMPORTANTE: chamado APÓS app = Flask(...) e ANTES das rotas serem
 # definidas pela auto-instrumentação ter efeito.
 # ============================================================================
-from telemetry import init_telemetry
 init_telemetry(flask_app=app, service_name="analytics-service")
 
 @app.route('/health')
