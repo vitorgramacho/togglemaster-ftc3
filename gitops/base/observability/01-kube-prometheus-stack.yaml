@@ -1,0 +1,170 @@
+# =============================================================================
+# ArgoCD Application: kube-prometheus-stack
+# ---------------------------------------------------------------------------
+# Provisiona, num único chart, a base de métricas e visualização:
+#   - Prometheus Operator (CRDs: ServiceMonitor, PrometheusRule, etc.)
+#   - Prometheus (armazenamento de métricas)
+#   - Grafana (dashboards)
+#   - Alertmanager (roteamento de alertas -> PagerDuty -> Discord)
+#   - node-exporter / kube-state-metrics (métricas do cluster)
+#
+# Os "values" inline cobrem os requisitos da Fase 4 sem cair em pegadinhas
+# típicas do AWS Academy:
+#   - storage classe gp2 (padrão do EKS no AWS Academy)
+#   - retention curta (24h) para caber em volumes pequenos
+#   - Grafana com password fixo (não há secret manager para a fase de demo)
+#   - Alertmanager apontando para um Secret externo (pagerduty-secret) com a
+#     PD Integration Key, NUNCA commitado no Git em texto plano.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 65.1.1  # Fixado para evitar surpresas no CI
+    helm:
+      releaseName: kps
+      values: |
+        # ---------- Defaults globais ----------
+        defaultRules:
+          create: true
+          # Alertas padrão de Kubernetes (CPU, memória, pods em CrashLoop, etc.)
+
+        # ---------- Prometheus ----------
+        prometheus:
+          prometheusSpec:
+            # Retenção curta para nodes t3.medium do AWS Academy
+            retention: 24h
+            retentionSize: "5GB"
+            resources:
+              requests: { cpu: 200m, memory: 512Mi }
+              limits:   { cpu: 1000m, memory: 2Gi }
+            # IMPORTANTE: faz o Prometheus enxergar PrometheusRules de QUALQUER
+            # namespace, não só do "observability". Necessário para regras
+            # criadas perto dos serviços (futuro) e para o OTel Collector.
+            ruleSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            # Persistência: usa gp2 (default no AWS Academy)
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp2
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+            # Recebe métricas escaladas via OTLP do OTel Collector
+            enableRemoteWriteReceiver: true
+            # Permite o scraping baseado em anotações pod/svc (Datadog-style)
+            additionalScrapeConfigs:
+              - job_name: 'kubernetes-pods'
+                kubernetes_sd_configs:
+                  - role: pod
+                relabel_configs:
+                  # Só pods com anotação "prometheus.io/scrape: 'true'"
+                  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                    action: keep
+                    regex: true
+                  # Permite path customizado via "prometheus.io/path" (default /metrics)
+                  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                    action: replace
+                    target_label: __metrics_path__
+                    regex: (.+)
+                  # Permite escolher porta via "prometheus.io/port"
+                  - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                    action: replace
+                    regex: ([^:]+)(?::\d+)?;(\d+)
+                    replacement: $1:$2
+                    target_label: __address__
+                  - source_labels: [__meta_kubernetes_namespace]
+                    target_label: namespace
+                  - source_labels: [__meta_kubernetes_pod_name]
+                    target_label: pod
+                  - source_labels: [__meta_kubernetes_pod_label_app]
+                    target_label: app
+                # NOTA: o label 'service' (usado nos alertas/dashboard) já vem
+                # como atributo da própria métrica, emitido pelo SDK OTel de
+                # cada serviço (attribute "service"). Por isso NÃO o derivamos
+                # aqui via relabel — evita o conflito que renomearia para
+                # 'exported_service' quando os dois coexistem. honor_labels
+                # garante que o label vindo da métrica prevaleça.
+                honor_labels: true
+
+        # ---------- Alertmanager ----------
+        alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests: { cpu: 50m, memory: 64Mi }
+              limits:   { cpu: 200m, memory: 256Mi }
+            # Carrega config externa via Secret (criada por alertmanager-config.yaml)
+            configSecret: alertmanager-pagerduty-config
+            # IMPORTANTE: este flag faz o Alertmanager usar o Secret "alertmanager-pagerduty-config"
+            # em vez do default gerado pelo chart.
+            useExistingSecret: true
+
+        # ---------- Grafana ----------
+        grafana:
+          # Senha admin: para uma turma é OK, mas em produção viria de um secret
+          adminUser: admin
+          adminPassword: postech2026
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          service:
+            type: ClusterIP   # Acesso via port-forward ou Ingress (próxima linha)
+          # Datasources extras: além de Prometheus (já vem default), adiciona Loki
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              uid: loki
+              access: proxy
+              url: http://loki-gateway.observability.svc.cluster.local
+              jsonData:
+                maxLines: 1000
+                # derivedFields permite clicar de um log direto pro trace
+                derivedFields:
+                  - datasourceUid: tempo
+                    matcherRegex: "trace_id=(\\w+)"
+                    name: TraceID
+                    url: "$${__value.raw}"
+          # Dashboards provisionados via ConfigMap (sidecar do Grafana lê labels)
+          sidecar:
+            dashboards:
+              enabled: true
+              label: grafana_dashboard
+              labelValue: "1"
+              folder: /tmp/dashboards
+              searchNamespace: ALL
+            datasources:
+              enabled: true
+              label: grafana_datasource
+              labelValue: "1"
+              searchNamespace: ALL
+          # Plugins úteis
+          plugins:
+            - grafana-piechart-panel
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # Necessário para CRDs do Prometheus Operator
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

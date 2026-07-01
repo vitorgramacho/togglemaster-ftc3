@@ -1,0 +1,118 @@
+# =============================================================================
+# ArgoCD Application: Datadog Agent (APM)
+# ---------------------------------------------------------------------------
+# Por que TAMBÉM um Datadog Agent, se o OTel Collector já exporta para o
+# Datadog?
+#
+# - O OTel Collector envia TRACES (APM) e algumas métricas via OTLP.
+# - O Datadog Agent oferece visibilidade EXTRA do Kubernetes (Cluster Agent,
+#   Live Containers, Process Agent) que não vem pelo OTel padrão e que enche
+#   o "Service Map" e o "Container Map" do Datadog (requisito da Fase 4).
+#
+# Resumo da divisão (cada item vai pelo agent que tem MELHOR ergonomia):
+#   - Traces        -> OTel Collector (single source of truth, já configurado)
+#   - K8s Live      -> Datadog Cluster Agent
+#   - Process map   -> Datadog Process Agent
+#
+# IMPORTANTE: A DD_API_KEY é montada do Secret "datadog-secret" (NÃO commitado).
+# Veja: docs/fase4/DEPLOYMENT.md -> Etapa "Criar Secrets externos".
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: datadog
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://helm.datadoghq.com
+    chart: datadog
+    targetRevision: 3.81.0
+    helm:
+      releaseName: datadog
+      values: |
+        # ---------- Identificação ----------
+        datadog:
+          # A API key vem do Secret externo "datadog-secret" (key: api-key)
+          apiKeyExistingSecret: datadog-secret
+          # Site do Datadog (us5.datadoghq.com, datadoghq.eu, etc.) — fica
+          # fora do secret porque NÃO é sensível.
+          site: us5.datadoghq.com
+          clusterName: togglemaster-eks
+          tags:
+            - "env:production"
+            - "project:togglemaster"
+            - "phase:4"
+
+          # ---------- APM ----------
+          apm:
+            # Apesar do APM vir majoritariamente via OTel, deixamos a porta 8126
+            # aberta no Agent para qualquer biblioteca dd-trace-* que envie direto.
+            portEnabled: true
+            socketEnabled: true
+            instrumentation:
+              enabled: false   # auto-injection desligada (vamos instrumentar manual)
+
+          # ---------- Logs ----------
+          # NÃO coletamos logs via Datadog Agent porque o Loki já os tem.
+          # Evita custo duplicado e tráfego dobrado.
+          logs:
+            enabled: false
+
+          # ---------- Process Agent ----------
+          processAgent:
+            enabled: true
+            processCollection: true
+
+          # ---------- Métricas extras ----------
+          dogstatsd:
+            originDetection: true
+            useHostPort: true
+          orchestratorExplorer:
+            enabled: true        # mostra deployments/HPAs no Datadog
+          kubeStateMetricsEnabled: false   # já vem do kube-prometheus-stack
+
+        # ---------- Cluster Agent ----------
+        # Centraliza chamadas à API K8s -> evita rate-limit no AWS Academy
+        clusterAgent:
+          enabled: true
+          replicas: 1
+          metricsProvider:
+            enabled: false     # HPA continua usando o metrics-server padrão
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+
+        # ---------- Node Agent (DaemonSet) ----------
+        agents:
+          containers:
+            agent:
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits:   { cpu: 500m, memory: 512Mi }
+            traceAgent:
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits:   { cpu: 300m, memory: 256Mi }
+            processAgent:
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits:   { cpu: 300m, memory: 256Mi }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

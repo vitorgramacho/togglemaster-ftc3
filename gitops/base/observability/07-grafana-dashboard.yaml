@@ -1,0 +1,302 @@
+# =============================================================================
+# Grafana Dashboard: ToggleMaster — visão de saúde do ecossistema
+# ---------------------------------------------------------------------------
+# Requisito da Fase 4:
+#   "Crie, no mínimo, 1 Dashboard customizado no Grafana que centralize a
+#    saúde do ecossistema: uso de recursos do cluster, taxa de requisições
+#    dos microsserviços e painel de logs em tempo real."
+#
+# Este dashboard cobre TODOS os 3 itens em uma única tela:
+#   - linha 1: estado dos 5 serviços (up/down) + replicas
+#   - linha 2: taxa de requisições (RPS) por serviço e p95 de latência
+#   - linha 3: erros (4xx e 5xx) lado a lado
+#   - linha 4: uso de CPU e memória do cluster (todos os nodes)
+#   - linha 5: painel de LOGS em tempo real do Loki (filtrável por serviço)
+#
+# Como o Grafana sabe que isso aqui é um dashboard?
+#   O sidecar do Grafana (habilitado em 01-) procura ConfigMaps com a label
+#   "grafana_dashboard=1" e injeta o JSON neles como dashboard provisionado.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: togglemaster-overview-dashboard
+  namespace: observability
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/part-of: togglemaster
+data:
+  togglemaster-overview.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": true,
+      "panels": [
+        {
+          "type": "row",
+          "title": "🟢 Estado dos Serviços",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "type": "stat",
+          "title": "Serviços UP",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+          "targets": [{
+            "expr": "count(up{namespace=~\".*-namespace\"} == 1)",
+            "refId": "A"
+          }],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 3 },
+                  { "color": "green", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Serviços DOWN",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+          "targets": [{
+            "expr": "count(up{namespace=~\".*-namespace\"} == 0) OR vector(0)",
+            "refId": "A"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Réplicas Totais",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+          "targets": [{
+            "expr": "sum(kube_deployment_status_replicas_ready{namespace=~\".*-namespace\"})",
+            "refId": "A"
+          }]
+        },
+        {
+          "type": "stat",
+          "title": "Alertas Disparando",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+          "targets": [{
+            "expr": "count(ALERTS{alertstate=\"firing\"}) OR vector(0)",
+            "refId": "A"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 3 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "row",
+          "title": "📈 Taxa de Requisições e Latência",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+          "collapsed": false
+        },
+        {
+          "type": "timeseries",
+          "title": "Requisições/segundo por serviço (RPS)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "targets": [{
+            "expr": "sum by (service) (rate(http_requests_total{service=~\"auth-service|evaluation-service|flag-service|targeting-service|analytics-service\"}[2m]))",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 },
+              "unit": "reqps"
+            }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Latência p95 por serviço (segundos)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket{service=~\"auth-service|evaluation-service|flag-service|targeting-service|analytics-service\"}[5m])))",
+            "legendFormat": "p95 {{service}}",
+            "refId": "A"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "drawStyle": "line", "fillOpacity": 0 }
+            }
+          }
+        },
+        {
+          "type": "row",
+          "title": "❌ Erros HTTP",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+          "collapsed": false
+        },
+        {
+          "type": "timeseries",
+          "title": "Erros 5xx por serviço",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+          "targets": [{
+            "expr": "sum by (service) (rate(http_requests_total{http_response_status_code=~\"5..\",service=~\"auth-service|evaluation-service|flag-service|targeting-service|analytics-service\"}[2m]))",
+            "legendFormat": "5xx {{service}}",
+            "refId": "A"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "bars", "fillOpacity": 80 },
+              "color": { "mode": "fixed", "fixedColor": "red" }
+            }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Taxa de erro 5xx (%)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+          "targets": [{
+            "expr": "(sum by (service) (rate(http_requests_total{http_response_status_code=~\"5..\",service=~\"auth-service|evaluation-service|flag-service|targeting-service|analytics-service\"}[5m])) / sum by (service) (rate(http_requests_total{service=~\"auth-service|evaluation-service|flag-service|targeting-service|analytics-service\"}[5m]))) * 100",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "row",
+          "title": "🖥️  Recursos do Cluster",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+          "collapsed": false
+        },
+        {
+          "type": "timeseries",
+          "title": "Uso de CPU por node",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+          "targets": [{
+            "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "max": 100,
+              "custom": { "drawStyle": "line", "fillOpacity": 20 }
+            }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Uso de Memória por node",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+          "targets": [{
+            "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "max": 100,
+              "custom": { "drawStyle": "line", "fillOpacity": 20 }
+            }
+          }
+        },
+        {
+          "type": "row",
+          "title": "📜 Logs em Tempo Real (Loki)",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+          "collapsed": false
+        },
+        {
+          "type": "logs",
+          "title": "Logs de todos os microsserviços (filtre pelos labels)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 33 },
+          "targets": [{
+            "expr": "{k8s_namespace_name=~\".*-namespace\"} | line_format \"{{.k8s_pod_name}} | {{.body}}\"",
+            "refId": "A"
+          }],
+          "options": {
+            "showTime": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending",
+            "dedupStrategy": "none",
+            "enableLogDetails": true
+          }
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 39,
+      "tags": ["togglemaster", "fase4", "observability"],
+      "templating": {
+        "list": [
+          {
+            "name": "service",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "query": "label_values(up{namespace=~\".*-namespace\"}, service)",
+            "multi": true,
+            "includeAll": true,
+            "refresh": 1
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "timepicker": {},
+      "timezone": "America/Sao_Paulo",
+      "title": "ToggleMaster — Visão Geral (Fase 4)",
+      "uid": "togglemaster-overview",
+      "version": 1,
+      "weekStart": ""
+    }

@@ -1,0 +1,37 @@
+# =============================================================================
+# ArgoCD Application: Self-Healing Webhook
+# ---------------------------------------------------------------------------
+# Aplica os manifestos de gitops/base/self-healing/ no namespace observability.
+# Separamos esta Application do "observability-stack" porque, em produção,
+# pode haver uma equipe DIFERENTE responsável por response automation —
+# uma Application por dono = governance mais clara no ArgoCD.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: self-healing-webhook
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # Apontar para o MESMO repo GitOps, path = base/self-healing
+    repoURL: https://github.com/SEU-USUARIO/togglemaster-fase4.git
+    targetRevision: main
+    path: gitops/base/self-healing
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

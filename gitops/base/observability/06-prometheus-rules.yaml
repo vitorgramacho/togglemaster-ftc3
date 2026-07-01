@@ -1,0 +1,180 @@
+# =============================================================================
+# PrometheusRule: alertas customizados do ToggleMaster
+# ---------------------------------------------------------------------------
+# Os "must-have" da Fase 4:
+#
+#   1) HighHttpErrorRate -> taxa de 5xx > 5% em qualquer microsserviço
+#      Label: severity=critical, auto_heal=true
+#         => Vai pro PagerDuty (severity crítica)
+#         => Dispara o webhook self-healing (kubectl rollout restart)
+#
+#   2) ServiceDown      -> /health falhou em 2 scrapes seguidos
+#   3) HighLatency      -> p95 da resposta > 2s
+#   4) PodCrashLooping  -> pod re-startou > 3x em 10min
+#   5) HighMemoryUsage  -> uso > 90% da memory.limits
+#
+# Notas:
+#   - "auto_heal=true" só na regra que sabemos curar com restart. Por exemplo,
+#     "ServiceDown" pode ser BANCO de dados caído -> restart NÃO ajuda, e
+#     pioraria o cenário acordando ainda mais gente. Por isso só HighHttpErrorRate
+#     tem auto-heal.
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: togglemaster-alerts
+  namespace: observability
+  labels:
+    # Necessário para o Prometheus do kube-prometheus-stack pegar a regra
+    release: kps
+    app.kubernetes.io/part-of: togglemaster
+spec:
+  groups:
+    # =========================================================================
+    # Grupo 1: erros HTTP de aplicação
+    # =========================================================================
+    - name: togglemaster.app.errors
+      interval: 30s
+      rules:
+        # ---- O alerta MAIS importante (cenário descrito no enunciado) ----
+        # "o serviço de avaliação começou a falhar silenciosamente"
+        - alert: HighHttpErrorRate
+          expr: |
+            (
+              sum by (service) (
+                rate(http_requests_total{
+                  http_response_status_code=~"5..",
+                  service=~"auth-service|evaluation-service|flag-service|targeting-service|analytics-service"
+                }[5m])
+              )
+              /
+              sum by (service) (
+                rate(http_requests_total{
+                  service=~"auth-service|evaluation-service|flag-service|targeting-service|analytics-service"
+                }[5m])
+              )
+            ) > 0.05
+          for: 2m
+          labels:
+            severity: critical
+            auto_heal: "true"      # Dispara o self-healing
+            category: errors
+          annotations:
+            summary: '🔥 Taxa de erros HTTP 5xx > 5% em {{ $labels.service }}'
+            description: |
+              O serviço {{ $labels.service }} está respondendo erros 5xx em mais
+              de 5% das requisições nos últimos 5 minutos.
+              Valor atual: {{ $value | humanizePercentage }}
+            runbook_url: 'https://github.com/togglemaster/runbooks/blob/main/high-error-rate.md'
+
+    # =========================================================================
+    # Grupo 2: disponibilidade
+    # =========================================================================
+    - name: togglemaster.availability
+      interval: 30s
+      rules:
+        - alert: ServiceDown
+          expr: |
+            up{
+              namespace=~"auth-namespace|evaluation-namespace|flag-namespace|targeting-namespace|analytics-namespace"
+            } == 0
+          for: 2m
+          labels:
+            severity: critical
+            category: availability
+            # SEM auto_heal: pode ser problema de infra (RDS, ElastiCache).
+            # Restart é remédio errado.
+          annotations:
+            summary: '⛔ Serviço {{ $labels.service }} INDISPONÍVEL no namespace {{ $labels.namespace }}'
+            description: 'O endpoint /health não respondeu por mais de 2 minutos. Verifique pod, DB e Redis.'
+
+        - alert: PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{
+              namespace=~".*-namespace"
+            }[10m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+            category: stability
+          annotations:
+            summary: '🔄 Pod {{ $labels.pod }} reiniciando em loop'
+            description: 'O pod {{ $labels.pod }} no namespace {{ $labels.namespace }} reiniciou mais de 3 vezes em 10 minutos.'
+
+    # =========================================================================
+    # Grupo 3: latência
+    # =========================================================================
+    - name: togglemaster.latency
+      interval: 30s
+      rules:
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (service, le) (
+                rate(http_request_duration_seconds_bucket{
+                  service=~"auth-service|evaluation-service|flag-service|targeting-service|analytics-service"
+                }[5m])
+              )
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            category: performance
+          annotations:
+            summary: '🐢 Latência alta (p95 > 2s) em {{ $labels.service }}'
+            description: 'O p95 do tempo de resposta de {{ $labels.service }} está em {{ $value }}s.'
+
+    # =========================================================================
+    # Grupo 4: recursos do node
+    # =========================================================================
+    - name: togglemaster.resources
+      interval: 1m
+      rules:
+        - alert: HighMemoryUsage
+          expr: |
+            (
+              container_memory_working_set_bytes{
+                namespace=~".*-namespace",
+                container!="",
+                container!="POD"
+              }
+              /
+              container_spec_memory_limit_bytes{
+                namespace=~".*-namespace",
+                container!="",
+                container!="POD"
+              }
+            ) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+            category: resources
+          annotations:
+            summary: '💾 Memória do container {{ $labels.container }} > 90% do limit'
+            description: 'O container {{ $labels.container }} no pod {{ $labels.pod }} está usando {{ $value | humanizePercentage }} da memory.limits.'
+
+        - alert: HighCpuUsage
+          expr: |
+            (
+              sum by (namespace, pod, container) (
+                rate(container_cpu_usage_seconds_total{
+                  namespace=~".*-namespace",
+                  container!="",
+                  container!="POD"
+                }[5m])
+              )
+              /
+              sum by (namespace, pod, container) (
+                kube_pod_container_resource_limits{
+                  namespace=~".*-namespace",
+                  resource="cpu"
+                }
+              )
+            ) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+            category: resources
+          annotations:
+            summary: '⚡ CPU do container {{ $labels.container }} > 85% do limit'
+            description: 'Sustained high CPU em {{ $labels.container }} ({{ $value | humanizePercentage }}). HPA deveria ter escalado — verifique.'

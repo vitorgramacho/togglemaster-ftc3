@@ -3,36 +3,68 @@ kind: Deployment
 metadata:
   name: analytics-service
   namespace: analytics-namespace
-  labels: { app: analytics-service }
+  labels:
+    app: analytics-service
+    tags.datadoghq.com/service: analytics-service
+    tags.datadoghq.com/env: production
+    tags.datadoghq.com/version: "1.0.0"
 spec:
-  replicas: 2
-  selector: { matchLabels: { app: analytics-service } }
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-service
   template:
-    metadata: { labels: { app: analytics-service } }
+    metadata:
+      labels:
+        app: analytics-service
+        tags.datadoghq.com/service: analytics-service
+        tags.datadoghq.com/env: production
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "9464"
+        prometheus.io/path:   "/metrics"
+        ad.datadoghq.com/analytics-service.logs: '[{"source":"python","service":"analytics-service"}]'
     spec:
       containers:
         - name: analytics-service
-          image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-analytics:v1.0.0-ea2c72a
+          image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-analytics:v1.0.0
           imagePullPolicy: Always
-          ports: [ { containerPort: 8005 } ]
-          # aws-credentials injeta AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e
-          # AWS_SESSION_TOKEN necessários para o SDK chamar SQS e DynamoDB.
+          ports:
+            - { containerPort: 8005, name: http }
+            - { containerPort: 9464, name: metrics }
           envFrom:
             - secretRef:
                 name: aws-credentials
                 optional: true
           env:
             - { name: PORT, value: "8005" }
-            - name: REDIS_URL
-              valueFrom: { configMapKeyRef: { name: togglemaster-config, key: REDIS_URL } }
             - name: AWS_REGION
               valueFrom: { configMapKeyRef: { name: togglemaster-config, key: AWS_REGION } }
             - name: AWS_SQS_URL
               valueFrom: { configMapKeyRef: { name: togglemaster-config, key: AWS_SQS_URL } }
             - name: AWS_DYNAMODB_TABLE
               valueFrom: { configMapKeyRef: { name: togglemaster-config, key: AWS_DYNAMODB_TABLE } }
+            # ===== OpenTelemetry (Fase 4) =====
+            - name: OTEL_SERVICE_NAME
+              value: "analytics-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-opentelemetry-collector.observability.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=production"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            # ===== Datadog tags =====
+            - name: DD_SERVICE
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/service']" } }
+            - name: DD_ENV
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/env']" } }
+            - name: DD_VERSION
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/version']" } }
           resources:
-            requests: { cpu: "200m", memory: "256Mi" }
-            limits:   { cpu: "500m", memory: "512Mi" }
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits:   { cpu: "300m", memory: "256Mi" }
           readinessProbe: { httpGet: { path: /health, port: 8005 }, initialDelaySeconds: 10, periodSeconds: 5 }
           livenessProbe:  { httpGet: { path: /health, port: 8005 }, initialDelaySeconds: 30, periodSeconds: 15 }

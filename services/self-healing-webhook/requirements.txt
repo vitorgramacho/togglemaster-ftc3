@@ -1,0 +1,2 @@
+# Cliente oficial do Kubernetes (compatível com v1.28+ do EKS no AWS Academy)
+kubernetes==31.0.0

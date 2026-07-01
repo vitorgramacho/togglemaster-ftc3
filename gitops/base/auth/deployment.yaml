@@ -1,5 +1,10 @@
-# auth-service — Deployment
-
+# auth-service — Deployment (Fase 4: instrumentado com OpenTelemetry)
+#
+# Mudanças desta fase em relação à Fase 3:
+#   - Anotações `prometheus.io/*` para que o coletor faça scrape do /metrics
+#   - Variáveis OTEL_* apontando para o coletor central
+#   - Variáveis DD_* (vão pelo OTel via tag, mas aceitas pelo agent também)
+#   - Porta 9464 exposta para o Prometheus scrapear
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,6 +12,10 @@ metadata:
   namespace: auth-namespace
   labels:
     app: auth-service
+    # Tags unificadas: aparecem como facets no APM/Loki/Prometheus
+    tags.datadoghq.com/service: auth-service
+    tags.datadoghq.com/env: production
+    tags.datadoghq.com/version: "1.0.0"
 spec:
   replicas: 2
   selector:
@@ -16,6 +25,18 @@ spec:
     metadata:
       labels:
         app: auth-service
+        tags.datadoghq.com/service: auth-service
+        tags.datadoghq.com/env: production
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        # ----- Prometheus scrape -----
+        # O Prometheus configurado em 01-kube-prometheus-stack.yaml pega
+        # POD-level annotations (additionalScrapeConfigs).
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "9464"
+        prometheus.io/path:   "/metrics"
+        # ----- Admission do Datadog Agent (sem auto-injection: só labels) -----
+        ad.datadoghq.com/auth-service.logs: '[{"source":"go","service":"auth-service"}]'
     spec:
       containers:
         - name: auth-service
@@ -25,6 +46,8 @@ spec:
           ports:
             - containerPort: 8001
               name: http
+            - containerPort: 9464
+              name: metrics
           env:
             - name: PORT
               value: "8001"
@@ -38,6 +61,23 @@ spec:
                 secretKeyRef:
                   name: auth-extra-secret
                   key: MASTER_KEY
+            # ===== OpenTelemetry =====
+            - name: OTEL_SERVICE_NAME
+              value: "auth-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              # Coletor central (DaemonSet) — chamado no NODE local via DNS de cluster
+              value: "http://otel-opentelemetry-collector.observability.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=production"
+            # ===== Datadog (somente tags, sem agent auto-inject) =====
+            - name: DD_SERVICE
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/service']" } }
+            - name: DD_ENV
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/env']" } }
+            - name: DD_VERSION
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/version']" } }
           resources:
             requests:
               cpu: "100m"

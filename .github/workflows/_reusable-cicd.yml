@@ -35,6 +35,16 @@ on:
         description: "Caminho do arquivo de deployment no repo GitOps."
         type: string
         required: true
+      service_dir:
+        description: >-
+          Caminho da pasta do serviço dentro de services/. Opcional.
+          Por padrão é vazio e o workflow usa "services/<service>-service"
+          (convenção dos 5 microsserviços). O self-healing-webhook (Fase 4)
+          NÃO segue essa convenção (sua pasta é "services/self-healing-webhook",
+          sem o sufixo "-service"), então passa este input explicitamente.
+        type: string
+        required: false
+        default: ""
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -67,7 +77,7 @@ jobs:
 
       - name: Go build + test
         if: inputs.language == 'go'
-        working-directory: services/${{ inputs.service }}-service
+        working-directory: ${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}
         run: |
           # go mod tidy resolve go.sum sem precisar versioná-lo.
           # Adequado porque o repo não inclui go.sum para todos os serviços.
@@ -85,7 +95,7 @@ jobs:
 
       - name: Python install + test
         if: inputs.language == 'python'
-        working-directory: services/${{ inputs.service }}-service
+        working-directory: ${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}
         run: |
           pip install -r requirements.txt
           pip install pytest
@@ -114,12 +124,12 @@ jobs:
 
       - name: go mod tidy (Go)
         if: inputs.language == 'go'
-        working-directory: services/${{ inputs.service }}-service
+        working-directory: ${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}
         run: go mod tidy
 
       - name: golangci-lint (Go)
         if: inputs.language == 'go'
-        working-directory: services/${{ inputs.service }}-service
+        working-directory: ${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
           golangci-lint run --timeout=5m
@@ -132,7 +142,7 @@ jobs:
 
       - name: flake8
         if: inputs.language == 'python'
-        working-directory: services/${{ inputs.service }}-service
+        working-directory: ${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}
         run: |
           pip install flake8
           flake8 . --count --max-line-length=127 \
@@ -153,7 +163,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
-          scan-ref: 'services/${{ inputs.service }}-service'
+          scan-ref: "${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}"
           severity: 'CRITICAL'
           exit-code: '1'                # ← BLOQUEIA pipeline em CRITICAL
           ignore-unfixed: true
@@ -168,7 +178,7 @@ jobs:
 
       - name: SAST — gosec (Go)
         if: inputs.language == 'go'
-        working-directory: services/${{ inputs.service }}-service
+        working-directory: ${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}
         run: |
           go mod tidy
           go install github.com/securego/gosec/v2/cmd/gosec@latest
@@ -197,7 +207,7 @@ jobs:
 
       - name: SAST — bandit (Python)
         if: inputs.language == 'python'
-        working-directory: services/${{ inputs.service }}-service
+        working-directory: ${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}
         run: |
           pip install bandit
           # -lll = só reporta severity HIGH. Sai com código != 0 se achar.
@@ -251,7 +261,7 @@ jobs:
           docker build \
             -t ${{ steps.tag.outputs.uri }} \
             -t ${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr_repository }}:latest \
-            ./services/${{ inputs.service }}-service
+            ${{ inputs.service_dir != '' && inputs.service_dir || format('services/{0}-service', inputs.service) }}
 
       - name: Trivy — Container scan (CRITICAL bloqueia)
         uses: aquasecurity/trivy-action@master

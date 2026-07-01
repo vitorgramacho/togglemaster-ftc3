@@ -1,0 +1,132 @@
+# =============================================================================
+# Alertmanager → PagerDuty (que reencaminha para Discord)
+# ---------------------------------------------------------------------------
+# Fluxo:
+#   Prometheus dispara alerta
+#     -> Alertmanager (este Secret)
+#        -> PagerDuty (cria incidente)
+#           -> Discord (extension webhook configurada na UI do PagerDuty)
+#           -> Self-Healing webhook (extension custom no PagerDuty)
+#
+# Por que o Discord NÃO está no Alertmanager direto?
+#   Para CENTRALIZAR incidente: queremos UM trail de auditoria no PagerDuty
+#   ("quem acknowledgeou, quando", "qual o MTTA/MTTR"). Se o Discord viesse
+#   por dois caminhos (PagerDuty E Alertmanager), teríamos notificação
+#   duplicada para a mesma falha.
+#
+# IMPORTANTE: O `pagerduty_url` e o `service_key` estão como placeholders
+# {{ ... }} que o ArgoCD NÃO substitui. A integração key vem de um Secret
+# externo (`pagerduty-secret`) e é injetada no template via envsubst (ver
+# DEPLOYMENT.md) OU via Argo CD `valueFiles` referenciando uma chave de
+# secret externo - aqui usamos a abordagem mais simples: substituir em
+# tempo de aplicação com `kubectl create secret --from-literal`.
+# =============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-pagerduty-config
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: togglemaster
+    app.kubernetes.io/managed-by: argocd
+type: Opaque
+stringData:
+  # ATENÇÃO: este arquivo deve ter PAGERDUTY_INTEGRATION_KEY substituído no
+  # deploy. Veja docs/fase4/DEPLOYMENT.md -> "Aplicar secret do Alertmanager"
+  # para o comando exato com envsubst.
+  alertmanager.yaml: |
+    global:
+      resolve_timeout: 5m
+      pagerduty_url: https://events.pagerduty.com/v2/enqueue
+
+    # ---------- Templates ----------
+    # Mensagem rica para o PagerDuty (que reencaminha para Discord)
+    templates:
+      - '/etc/alertmanager/config/*.tmpl'
+
+    # ---------- Route tree ----------
+    # Aqui está a "anti-fadiga de alerta": agrupamos por alertname para que
+    # 10 pods do mesmo deployment caindo NÃO virem 10 incidentes.
+    route:
+      receiver: 'pagerduty-default'
+      group_by: ['alertname', 'namespace', 'service']
+      group_wait: 30s         # Espera 30s pra ver se chegam alertas relacionados
+      group_interval: 5m      # Reenviar resumo após 5m de novos alertas
+      repeat_interval: 4h     # Repetir o mesmo grupo a cada 4h se não acked
+
+      routes:
+        # --- Rota CRÍTICA: vai pro PagerDuty com severity=critical ---
+        - matchers:
+            - severity = "critical"
+          receiver: 'pagerduty-critical'
+          group_wait: 10s        # Crítico = avisa rápido (10s)
+          repeat_interval: 1h    # Repete mais agressivo (1h)
+          continue: true         # Também dispara o webhook de self-healing
+        # --- Rota AUTO-HEAL: webhook do nosso pod self-healing-webhook ---
+        - matchers:
+            - severity = "critical"
+            - auto_heal = "true"
+          receiver: 'self-healing-webhook'
+          group_wait: 0s         # Sem espera: queremos restart imediato
+          repeat_interval: 30m
+        # --- Rota WARNING: só PagerDuty com low-urgency ---
+        - matchers:
+            - severity = "warning"
+          receiver: 'pagerduty-warning'
+
+      # ---------- Inibição ----------
+      # Se um alerta crítico para um namespace está disparando, não inunde
+      # com warnings do mesmo namespace.
+    inhibit_rules:
+      - source_matchers:
+          - severity = "critical"
+        target_matchers:
+          - severity = "warning"
+        equal: ['alertname', 'namespace']
+
+    # ---------- Receivers ----------
+    receivers:
+      # Fallback caso algum alerta escape do match
+      - name: 'pagerduty-default'
+        pagerduty_configs:
+          - service_key: 'PAGERDUTY_INTEGRATION_KEY'
+            severity: 'info'
+            description: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} ({{ .GroupLabels.namespace }})'
+            details:
+              alertname: '{{ .GroupLabels.alertname }}'
+              namespace: '{{ .GroupLabels.namespace }}'
+              service:   '{{ .GroupLabels.service }}'
+              summary:   '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+      - name: 'pagerduty-critical'
+        pagerduty_configs:
+          - service_key: 'PAGERDUTY_INTEGRATION_KEY'
+            severity: 'critical'
+            client: 'Alertmanager (ToggleMaster)'
+            client_url: 'https://prometheus.togglemaster.local'
+            description: '🔥 [CRITICAL] {{ .GroupLabels.alertname }} — {{ .GroupLabels.service }}'
+            details:
+              # O Discord (via PagerDuty extension) renderiza estes campos
+              # como blocos formatados.
+              alertname:   '{{ .GroupLabels.alertname }}'
+              namespace:   '{{ .GroupLabels.namespace }}'
+              service:     '{{ .GroupLabels.service }}'
+              num_firing:  '{{ .Alerts.Firing | len }}'
+              summary:     '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ end }}'
+              description: '{{ range .Alerts }}{{ .Annotations.description }}{{ "\n" }}{{ end }}'
+              runbook:     '{{ range .Alerts }}{{ .Annotations.runbook_url }}{{ end }}'
+
+      - name: 'pagerduty-warning'
+        pagerduty_configs:
+          - service_key: 'PAGERDUTY_INTEGRATION_KEY'
+            severity: 'warning'
+            description: '⚠️ [WARNING] {{ .GroupLabels.alertname }} — {{ .GroupLabels.service }}'
+
+      # ---------- Self-Healing Webhook ----------
+      # Aponta para o pod self-healing-webhook (ver gitops/base/self-healing/)
+      - name: 'self-healing-webhook'
+        webhook_configs:
+          - url: 'http://self-healing-webhook.observability.svc.cluster.local:8080/heal'
+            send_resolved: true
+            http_config:
+              follow_redirects: true

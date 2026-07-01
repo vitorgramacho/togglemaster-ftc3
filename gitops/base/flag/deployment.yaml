@@ -5,6 +5,9 @@ metadata:
   namespace: flag-namespace
   labels:
     app: flag-service
+    tags.datadoghq.com/service: flag-service
+    tags.datadoghq.com/env: production
+    tags.datadoghq.com/version: "1.0.0"
 spec:
   replicas: 2
   selector:
@@ -14,13 +17,22 @@ spec:
     metadata:
       labels:
         app: flag-service
+        tags.datadoghq.com/service: flag-service
+        tags.datadoghq.com/env: production
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "9464"
+        prometheus.io/path:   "/metrics"
+        ad.datadoghq.com/flag-service.logs: '[{"source":"python","service":"flag-service"}]'
     spec:
       containers:
         - name: flag-service
           image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-flag:v1.0.0-37e61be
           imagePullPolicy: Always
           ports:
-            - containerPort: 8002
+            - { containerPort: 8002, name: http }
+            - { containerPort: 9464, name: metrics }
           env:
             - name: PORT
               value: "8002"
@@ -34,6 +46,25 @@ spec:
                 configMapKeyRef:
                   name: togglemaster-config
                   key: AUTH_SERVICE_URL
+            # ===== OpenTelemetry (Fase 4) =====
+            - name: OTEL_SERVICE_NAME
+              value: "flag-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-opentelemetry-collector.observability.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=production"
+            # Python: PYTHONPATH para o módulo telemetry copiado pelo Docker
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            # ===== Datadog tags =====
+            - name: DD_SERVICE
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/service']" } }
+            - name: DD_ENV
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/env']" } }
+            - name: DD_VERSION
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/version']" } }
           resources:
             requests: { cpu: "100m", memory: "128Mi" }
             limits:   { cpu: "300m", memory: "256Mi" }

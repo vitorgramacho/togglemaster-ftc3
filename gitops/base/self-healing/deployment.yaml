@@ -1,0 +1,135 @@
+# =============================================================================
+# Self-Healing Webhook — ServiceAccount + RBAC + Deployment + Service
+# ---------------------------------------------------------------------------
+# Princípio do menor privilégio:
+#   O ClusterRole concede APENAS get/patch em "deployments" e nos namespaces
+#   *-namespace. Não é cluster-admin — é só o suficiente para fazer rollout.
+#
+# Por que ClusterRole e não Role?
+#   Precisamos atuar em VÁRIOS namespaces (auth-namespace, flag-namespace, ...).
+#   Criar 5 Roles + 5 RoleBindings é mais ruído visual e mais difícil de
+#   manter. Um ClusterRole com RoleBindings POR NAMESPACE seria o ouro;
+#   ficamos com ClusterRoleBinding por simplicidade, ainda dentro do escopo
+#   da fase.
+# =============================================================================
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: self-healing-webhook
+  namespace: observability
+  labels:
+    app: self-healing-webhook
+    app.kubernetes.io/part-of: togglemaster
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: self-healing-webhook
+  labels:
+    app: self-healing-webhook
+    app.kubernetes.io/part-of: togglemaster
+rules:
+  # Restartar deployment = patch em apps/v1/deployments
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+  # Útil para diagnóstico (não estritamente necessário)
+  - apiGroups: [""]
+    resources: ["pods", "events"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: self-healing-webhook
+  labels:
+    app: self-healing-webhook
+    app.kubernetes.io/part-of: togglemaster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: self-healing-webhook
+subjects:
+  - kind: ServiceAccount
+    name: self-healing-webhook
+    namespace: observability
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: self-healing-webhook
+  namespace: observability
+  labels:
+    app: self-healing-webhook
+    app.kubernetes.io/part-of: togglemaster
+spec:
+  replicas: 1   # Um único pod já basta — restart é raro
+  selector:
+    matchLabels:
+      app: self-healing-webhook
+  template:
+    metadata:
+      labels:
+        app: self-healing-webhook
+      annotations:
+        # Para o Prometheus raspar métricas DESTE pod no futuro
+        prometheus.io/scrape: "false"
+    spec:
+      serviceAccountName: self-healing-webhook
+      containers:
+        - name: webhook
+          # ESTA LINHA É ATUALIZADA AUTOMATICAMENTE PELO CI (sed) igual aos
+          # demais microsserviços.
+          image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-self-healing-webhook:v1.0.0-fase4
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: LISTEN_PORT
+              value: "8080"
+            - name: ALLOWED_NAMESPACE_REGEX
+              value: '^(auth|evaluation|flag|targeting|analytics)-namespace$'
+            - name: RATE_LIMIT_SECONDS
+              value: "300"
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "200m", memory: "128Mi" }
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: self-healing-webhook
+  namespace: observability
+  labels:
+    app: self-healing-webhook
+    app.kubernetes.io/part-of: togglemaster
+spec:
+  selector:
+    app: self-healing-webhook
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

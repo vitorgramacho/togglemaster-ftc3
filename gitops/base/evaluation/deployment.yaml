@@ -3,24 +3,38 @@ kind: Deployment
 metadata:
   name: evaluation-service
   namespace: evaluation-namespace
-  labels: { app: evaluation-service }
+  labels:
+    app: evaluation-service
+    tags.datadoghq.com/service: evaluation-service
+    tags.datadoghq.com/env: production
+    tags.datadoghq.com/version: "1.0.0"
 spec:
   replicas: 2
   selector: { matchLabels: { app: evaluation-service } }
   template:
-    metadata: { labels: { app: evaluation-service } }
+    metadata:
+      labels:
+        app: evaluation-service
+        tags.datadoghq.com/service: evaluation-service
+        tags.datadoghq.com/env: production
+        tags.datadoghq.com/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "9464"
+        prometheus.io/path:   "/metrics"
+        ad.datadoghq.com/evaluation-service.logs: '[{"source":"go","service":"evaluation-service"}]'
     spec:
       containers:
         - name: evaluation-service
           image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-evaluation:v1.0.0-f475dc2
           imagePullPolicy: Always
-          ports: [ { containerPort: 8004 } ]
-          # aws-credentials injeta AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e
-          # AWS_SESSION_TOKEN necessários para o SDK chamar SQS.
+          ports:
+            - { containerPort: 8004, name: http }
+            - { containerPort: 9464, name: metrics }
           envFrom:
             - secretRef:
                 name: aws-credentials
-                optional: true   # não quebra o pod se o secret ainda não existir
+                optional: true
           env:
             - { name: PORT, value: "8004" }
             - name: REDIS_URL
@@ -35,9 +49,24 @@ spec:
               valueFrom: { configMapKeyRef: { name: togglemaster-config, key: AWS_SQS_URL } }
             - name: SERVICE_API_KEY
               valueFrom: { secretKeyRef: { name: evaluation-extra-secret, key: SERVICE_API_KEY } }
+            # ===== OpenTelemetry =====
+            - name: OTEL_SERVICE_NAME
+              value: "evaluation-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-opentelemetry-collector.observability.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=production"
+            # ===== Datadog tags =====
+            - name: DD_SERVICE
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/service']" } }
+            - name: DD_ENV
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/env']" } }
+            - name: DD_VERSION
+              valueFrom: { fieldRef: { fieldPath: "metadata.labels['tags.datadoghq.com/version']" } }
           resources:
             requests: { cpu: "200m", memory: "256Mi" }
             limits:   { cpu: "500m", memory: "512Mi" }
           readinessProbe: { httpGet: { path: /health, port: 8004 }, initialDelaySeconds: 10, periodSeconds: 5 }
           livenessProbe:  { httpGet: { path: /health, port: 8004 }, initialDelaySeconds: 30, periodSeconds: 15 }
-

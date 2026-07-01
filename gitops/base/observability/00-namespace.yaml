@@ -1,0 +1,22 @@
+# =============================================================================
+# Namespace: observability
+# ---------------------------------------------------------------------------
+# Centraliza TODA a stack de observabilidade (Prometheus, Grafana, Loki,
+# OpenTelemetry Collector, Alertmanager) em um único namespace, separado
+# dos namespaces dos microsserviços. Isso simplifica:
+#   - RBAC (ServiceAccounts e ClusterRoles ficam isolados)
+#   - Network policies (caso futuramente sejam aplicadas)
+#   - Limpeza ("kubectl delete ns observability" derruba toda a stack)
+#
+# Aplicado pelo ArgoCD via Application "observability-stack".
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    name: observability
+    app.kubernetes.io/part-of: togglemaster
+    app.kubernetes.io/managed-by: argocd
+    # Permite que o Prometheus Operator faça scraping em pods deste namespace
+    monitoring: "enabled"

@@ -8,6 +8,7 @@ RUN apk add --no-cache git
 COPY go.mod ./
 RUN go mod download || true
 COPY . .
+# Fase 4: `go mod tidy` baixa as novas deps OpenTelemetry adicionadas no go.mod
 RUN go mod tidy
 
 # Build estático
@@ -25,7 +26,8 @@ COPY --from=builder /app/auth-service .
 RUN chown -R app:app /app
 USER app
 
-EXPOSE 8001
+# 8001: API HTTP. 9464: /metrics no formato Prometheus (Fase 4)
+EXPOSE 8001 9464
 
 CMD ["./auth-service"]
 

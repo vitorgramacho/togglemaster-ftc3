@@ -25,7 +25,8 @@ ENV PATH=/app/.local/bin:$PATH \
 
 USER app
 
-EXPOSE 8003
+# 8003: API HTTP. 9464: /metrics no formato Prometheus (Fase 4)
+EXPOSE 8003 9464
 
 CMD ["gunicorn", "--bind", "0.0.0.0:8003", "--workers", "2", \
      "--timeout", "30", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

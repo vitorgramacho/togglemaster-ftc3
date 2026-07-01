@@ -27,6 +27,17 @@ variable "services" {
   default     = ["auth", "flag", "targeting", "evaluation", "analytics"]
 }
 
+# -----------------------------------------------------------------------------
+# Fase 4: lista de imagens DE INFRAESTRUTURA (não viram namespace/App de
+# microsserviço, mas precisam de ECR). Hoje contém só o self-healing-webhook.
+# Separado de `services` para não criar namespace e App no ArgoCD por engano.
+# -----------------------------------------------------------------------------
+variable "infra_images" {
+  description = "Imagens auxiliares (Fase 4) que precisam de ECR mas NÃO geram namespace nem Application ArgoCD via módulo de serviço."
+  type        = list(string)
+  default     = ["self-healing-webhook"]
+}
+
 variable "db_services" {
   description = "Serviços que precisam de RDS."
   type        = list(string)

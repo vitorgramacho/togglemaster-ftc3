@@ -322,6 +322,110 @@ jobs:
             deployment/argocd-repo-server -n argocd
           echo "ArgoCD pronto."
 
+      # ═══════════════════════════════════════════════════════════════════════
+      # Fase 4 — Secrets de observabilidade (Datadog + Alertmanager/PagerDuty)
+      # -----------------------------------------------------------------------
+      # Estes secrets NÃO podem ir para o Git (contêm chaves sensíveis). Em vez
+      # disso, vêm dos GitHub Secrets do repositório e são criados aqui, ANTES
+      # do ArgoCD sincronizar as Applications de observability — assim o Datadog
+      # Agent e o Alertmanager já encontram seus secrets quando sobem.
+      #
+      # GitHub Secrets necessários (Settings → Secrets and variables → Actions):
+      #   DD_API_KEY                  → API key do Datadog
+      #   DD_SITE                     → site do Datadog (ex: us5.datadoghq.com)
+      #   PAGERDUTY_INTEGRATION_KEY   → integration key do PagerDuty (Events API V2)
+      #
+      # NOTA TÉCNICA: o GitHub Actions NÃO permite usar `secrets.X` direto em
+      # condições `if:` (sempre avalia como vazio). Por isso o step "gate" abaixo
+      # lê os secrets via env e publica flags em outputs; os steps seguintes
+      # decidem com base nessas flags.
+      # ═══════════════════════════════════════════════════════════════════════
+      - name: Checkout (para ler o manifesto do Alertmanager)
+        uses: actions/checkout@v4
+
+      - name: Verificar quais secrets de observabilidade existem
+        id: obs-secrets
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          PD_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+        run: |
+          if [ -n "$DD_API_KEY" ]; then
+            echo "has_datadog=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_datadog=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$PD_KEY" ]; then
+            echo "has_pagerduty=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_pagerduty=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Criar secret do Datadog
+        if: steps.obs-secrets.outputs.has_datadog == 'true'
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_SITE: ${{ secrets.DD_SITE }}
+        run: |
+          # Garante o namespace (o ArgoCD também cria, mas pode ainda não ter rodado)
+          kubectl create namespace observability \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Default do site caso o GitHub Secret DD_SITE não esteja definido
+          SITE="${DD_SITE:-us5.datadoghq.com}"
+
+          # "create --dry-run | apply" = idempotente (cria ou atualiza)
+          kubectl -n observability create secret generic datadog-secret \
+            --from-literal=api-key="${DD_API_KEY}" \
+            --from-literal=DD_API_KEY="${DD_API_KEY}" \
+            --from-literal=DD_SITE="${SITE}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "Secret datadog-secret aplicado no namespace observability."
+
+      - name: Avisar se a chave do Datadog não estiver configurada
+        if: steps.obs-secrets.outputs.has_datadog != 'true'
+        run: |
+          echo "::warning::GitHub Secret DD_API_KEY não definido. O Datadog Agent"
+          echo "::warning::ficará sem credencial. Defina DD_API_KEY/DD_SITE em"
+          echo "::warning::Settings → Secrets and variables → Actions, ou crie o"
+          echo "::warning::secret manualmente (ver GUIA-EXECUCAO.md, etapa 6)."
+
+      - name: Aplicar config do Alertmanager com a chave do PagerDuty
+        if: steps.obs-secrets.outputs.has_pagerduty == 'true'
+        env:
+          PD_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+        run: |
+          kubectl create namespace observability \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Substitui o placeholder do arquivo versionado pela chave real e
+          # aplica direto no cluster. O arquivo no Git permanece com o placeholder.
+          sed "s/PAGERDUTY_INTEGRATION_KEY/${PD_KEY}/g" \
+            gitops/base/observability/05-alertmanager-config.yaml \
+            | kubectl apply -f -
+          echo "Secret alertmanager-pagerduty-config aplicado."
+
+      - name: Avisar se a chave do PagerDuty não estiver configurada
+        if: steps.obs-secrets.outputs.has_pagerduty != 'true'
+        run: |
+          echo "::warning::GitHub Secret PAGERDUTY_INTEGRATION_KEY não definido."
+          echo "::warning::O Alertmanager não conseguirá abrir incidentes no"
+          echo "::warning::PagerDuty. Defina o secret ou aplique manualmente"
+          echo "::warning::(ver GUIA-EXECUCAO.md, etapa 6.4)."
+
+      - name: Forçar re-sync das Applications de observability
+        if: steps.obs-secrets.outputs.has_datadog == 'true' || steps.obs-secrets.outputs.has_pagerduty == 'true'
+        run: |
+          # Depois de criar os secrets, "cutuca" o ArgoCD para reconciliar já —
+          # caso ele tenha tentado sincronizar Datadog/Alertmanager antes dos
+          # secrets existirem. Sem isso, funcionaria mesmo assim (selfHeal+retry),
+          # só que mais devagar. O "|| true" evita falhar se a App ainda não foi
+          # registrada pelo ArgoCD neste exato momento.
+          for app in observability-stack kube-prometheus-stack datadog; do
+            kubectl -n argocd annotate application "$app" \
+              argocd.argoproj.io/refresh=hard --overwrite 2>/dev/null || true
+          done
+          echo "Refresh solicitado às Applications de observability."
+
       - name: Listar Applications do ArgoCD
         run: |
           echo "─── Applications no ArgoCD ───"

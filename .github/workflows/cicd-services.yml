@@ -8,11 +8,16 @@
 #   4) ci-targeting    → pipeline completo do targeting-service (se mudou)
 #   5) ci-evaluation   → pipeline completo do evaluation-service (se mudou)
 #   6) ci-analytics    → pipeline completo do analytics-service (se mudou)
-#   7) ci-summary      → agrega resultado dos 5; único check obrigatório
+#   7) ci-self-healing → pipeline do self-healing-webhook (Fase 4, se mudou)
+#   8) ci-summary      → agrega resultado dos 6; único check obrigatório
 #
-# Os 5 jobs do meio rodam EM PARALELO (todos dependem apenas de
+# Os 6 jobs do meio rodam EM PARALELO (todos dependem apenas de
 # detect-changes). Cada um chama o workflow reutilizável
 # `_reusable-cicd.yml` com parâmetros explícitos.
+#
+# NOTA Fase 4: o self-healing-webhook NÃO segue a convenção de pasta
+# "<service>-service" dos outros 5. Por isso seu job passa o input
+# `service_dir: services/self-healing-webhook` ao reusable.
 # =============================================================================
 
 name: CI/CD Microservices
@@ -62,6 +67,7 @@ jobs:
       targeting:  ${{ steps.filter.outputs.targeting }}
       evaluation: ${{ steps.filter.outputs.evaluation }}
       analytics:  ${{ steps.filter.outputs.analytics }}
+      self_healing: ${{ steps.filter.outputs.self_healing }}
       force_all:  ${{ steps.compute.outputs.force_all }}
     steps:
       - name: Checkout
@@ -89,6 +95,9 @@ jobs:
             analytics:
               - 'services/analytics-service/**'
               - 'gitops/base/analytics/**'
+            self_healing:
+              - 'services/self-healing-webhook/**'
+              - 'gitops/base/self-healing/**'
 
       - name: Computar "rodar todos"
         id: compute
@@ -211,30 +220,56 @@ jobs:
       GITOPS_TOKEN:          ${{ secrets.GITOPS_TOKEN }}
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # 7) RESUMO — agrega resultado dos 5 jobs.
+  # 7) SELF-HEALING WEBHOOK (Fase 4)
+  # ═══════════════════════════════════════════════════════════════════════════
+  ci-self-healing:
+    name: self-healing-webhook
+    needs: detect-changes
+    if: >-
+      needs.detect-changes.outputs.force_all == 'true' ||
+      needs.detect-changes.outputs.self_healing == 'true'
+    uses: ./.github/workflows/_reusable-cicd.yml
+    with:
+      service: self-healing-webhook
+      language: python
+      ecr_repository: togglemaster-self-healing-webhook
+      gitops_path: gitops/base/self-healing/deployment.yaml
+      # IMPORTANTE: a pasta deste serviço é "services/self-healing-webhook"
+      # (sem o sufixo "-service" dos outros). Por isso passamos service_dir
+      # explícito; sem ele o reusable procuraria "self-healing-webhook-service".
+      service_dir: services/self-healing-webhook
+    secrets:
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN:     ${{ secrets.AWS_SESSION_TOKEN }}
+      GITOPS_TOKEN:          ${{ secrets.GITOPS_TOKEN }}
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 8) RESUMO — agrega resultado dos 6 jobs.
   # ═══════════════════════════════════════════════════════════════════════════
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [ci-auth, ci-flag, ci-targeting, ci-evaluation, ci-analytics]
+    needs: [ci-auth, ci-flag, ci-targeting, ci-evaluation, ci-analytics, ci-self-healing]
     if: always()
     steps:
-      - name: Avaliar resultado dos 5 serviços
+      - name: Avaliar resultado dos jobs
         run: |
-          echo "auth:       ${{ needs.ci-auth.result }}"
-          echo "flag:       ${{ needs.ci-flag.result }}"
-          echo "targeting:  ${{ needs.ci-targeting.result }}"
-          echo "evaluation: ${{ needs.ci-evaluation.result }}"
-          echo "analytics:  ${{ needs.ci-analytics.result }}"
+          echo "auth:               ${{ needs.ci-auth.result }}"
+          echo "flag:               ${{ needs.ci-flag.result }}"
+          echo "targeting:          ${{ needs.ci-targeting.result }}"
+          echo "evaluation:         ${{ needs.ci-evaluation.result }}"
+          echo "analytics:          ${{ needs.ci-analytics.result }}"
+          echo "self-healing:       ${{ needs.ci-self-healing.result }}"
           echo ""
-          # Falha se qualquer job falhou (skipped = OK, não mudou nada)
           FAILED=false
           for result in \
             "${{ needs.ci-auth.result }}" \
             "${{ needs.ci-flag.result }}" \
             "${{ needs.ci-targeting.result }}" \
             "${{ needs.ci-evaluation.result }}" \
-            "${{ needs.ci-analytics.result }}"; do
+            "${{ needs.ci-analytics.result }}" \
+            "${{ needs.ci-self-healing.result }}"; do
             case "$result" in
               success|skipped) ;;
               *) FAILED=true; echo "::error::Job com resultado: $result" ;;

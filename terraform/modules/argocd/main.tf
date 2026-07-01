@@ -160,3 +160,90 @@ YAML
 
   depends_on = [helm_release.argocd]
 }
+
+# =============================================================================
+# Fase 4: Application "observability-stack"
+# ---------------------------------------------------------------------------
+# É o "App-of-Apps" para Prometheus, Loki, Grafana, OTel, Datadog e self-heal.
+# Aponta para gitops/base/observability/ que contém as 8 Applications + raw
+# manifests numerados (00- a 08-).
+#
+# O ArgoCD CHILD-APPS são criadas POR este Application: descobrindo cada
+# arquivo *.yaml no path e tratando-o como manifesto raw ou Application.
+# =============================================================================
+resource "kubectl_manifest" "observability_app" {
+  yaml_body = <<YAML
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-stack
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ${var.gitops_repo_url}
+    targetRevision: ${var.gitops_revision}
+    path: gitops/base/observability
+    directory:
+      recurse: false   # Não recursar — os subdirs são geridos pelas child apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true    # CRDs grandes (Prometheus Operator) precisam
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m
+YAML
+
+  depends_on = [helm_release.argocd]
+}
+
+# =============================================================================
+# Fase 4: Application "self-healing-webhook"
+# ---------------------------------------------------------------------------
+# Aplica os manifestos de gitops/base/self-healing/ no namespace observability.
+# Separado da observability-stack para que rebuilds do webhook não disparem
+# resync da stack inteira.
+# =============================================================================
+resource "kubectl_manifest" "self_healing_app" {
+  yaml_body = <<YAML
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: self-healing-webhook
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ${var.gitops_repo_url}
+    targetRevision: ${var.gitops_revision}
+    path: gitops/base/self-healing
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+YAML
+
+  depends_on = [helm_release.argocd, kubectl_manifest.observability_app]
+}

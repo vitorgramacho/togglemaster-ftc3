@@ -19,6 +19,12 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# ============================================================================
+# OpenTelemetry — Fase 4 (Tech Challenge PosTech)
+# ============================================================================
+from telemetry import init_telemetry
+init_telemetry(flask_app=app, service_name="targeting-service")
+
 # --- Configuração ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL")
