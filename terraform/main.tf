@@ -31,7 +31,7 @@ module "networking" {
 module "ecr" {
   source = "./modules/ecr"
 
-  project  = var.project
+  project = var.project
   # Fase 4: junta `services` e `infra_images` numa lista única
   # para o módulo ECR criar 1 repo para cada (5 microsserviços + 1 webhook).
   services = concat(var.services, var.infra_images)
