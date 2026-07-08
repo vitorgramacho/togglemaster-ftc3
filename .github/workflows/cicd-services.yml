@@ -223,7 +223,7 @@ jobs:
       AWS_SESSION_TOKEN:     ${{ secrets.AWS_SESSION_TOKEN }}
       GITOPS_TOKEN:          ${{ secrets.GITOPS_TOKEN }}
 
-  # ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════
   # 7) SELF-HEALING WEBHOOK (Fase 4)
   # ═══════════════════════════════════════════════════════════════════════════
   ci-self-healing:
@@ -232,7 +232,7 @@ jobs:
     if: >-
       needs.detect-changes.outputs.force_all == 'true' ||
       needs.detect-changes.outputs.self_healing == 'true' ||
-      needs.detect-changes.outputs.observability == 'true' # ◄ ADICIONADO: Se mudar a observabilidade, também roda o self-healing
+      needs.detect-changes.outputs.observability == 'true'
     uses: ./.github/workflows/_reusable-cicd.yml
     with:
       service: self-healing-webhook
@@ -245,7 +245,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN:     ${{ secrets.AWS_SESSION_TOKEN }}
       GITOPS_TOKEN:          ${{ secrets.GITOPS_TOKEN }}
-
+      
   # ═══════════════════════════════════════════════════════════════════════════
   # 8) RESUMO — agrega resultado dos 6 jobs.
   # ═══════════════════════════════════════════════════════════════════════════
