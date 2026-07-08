@@ -17,7 +17,7 @@ spec:
   project: default
   source:
     # Apontar para o MESMO repo GitOps, path = base/self-healing
-    repoURL: https://github.com/SEU-USUARIO/togglemaster-fase4.git
+    repoURL: https://github.com/vitorgramacho/togglemaster-ftc3.git
     targetRevision: main
     path: gitops/base/self-healing
   destination:

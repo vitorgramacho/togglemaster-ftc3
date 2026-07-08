@@ -20,7 +20,7 @@
 #   - Só restarta deployments dos namespaces *-namespace (regex hardcoded)
 #   - Rate-limit: máximo 1 restart por deployment a cada 5 minutos
 #     (evita "self-DDoS" se o alerta ficar oscilando)
-# =============================================================================
+# ==============================================================================
 
 import json
 import logging

@@ -15,7 +15,7 @@ from telemetry import init_telemetry
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-# Carrega .env para desenvolvimento local.
+# Carrega .env para desenvolvimento local..
 load_dotenv()
 
 app = Flask(__name__)

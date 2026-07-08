@@ -11,7 +11,7 @@ from flask import Flask, jsonify
 from dotenv import load_dotenv
 from telemetry import init_telemetry
 
-# Configura o logging    
+# Configura o loggingg
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 

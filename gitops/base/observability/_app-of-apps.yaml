@@ -30,7 +30,7 @@ spec:
   project: default
   source:
     # Substituir pelo repo real no momento do bootstrap (ver DEPLOYMENT.md)
-    repoURL: https://github.com/SEU-USUARIO/togglemaster-fase4.git
+    repoURL: https://github.com/vitorgramacho/togglemaster-ftc3.git
     targetRevision: main
     path: gitops/base/observability
     # Ordena pelo prefixo numérico nos arquivos: 00- < 01- < ... < 08-
