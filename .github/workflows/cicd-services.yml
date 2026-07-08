@@ -10,14 +10,6 @@
 #   6) ci-analytics    → pipeline completo do analytics-service (se mudou)
 #   7) ci-self-healing → pipeline do self-healing-webhook (Fase 4, se mudou)
 #   8) ci-summary      → agrega resultado dos 6; único check obrigatório
-#
-# Os 6 jobs do meio rodam EM PARALELO (todos dependem apenas de
-# detect-changes). Cada um chama o workflow reutilizável
-# `_reusable-cicd.yml` com parâmetros explícitos.
-#
-# NOTA Fase 4: o self-healing-webhook NÃO segue a convenção de pasta
-# "<service>-service" dos outros 5. Por isso seu job passa o input
-# `service_dir: services/self-healing-webhook` ao reusable.
 # =============================================================================
 
 name: CI/CD Microservices
@@ -28,6 +20,7 @@ on:
     paths:
       - "services/**"
       - "gitops/base/**"
+      - "observability/**" # ◄ ADICIONADO: Gatilho para a pasta de observabilidade
       - ".github/workflows/cicd-services.yml"
       - ".github/workflows/_reusable-cicd.yml"
   push:
@@ -35,6 +28,7 @@ on:
     paths:
       - "services/**"
       - "gitops/base/**"
+      - "observability/**" # ◄ ADICIONADO: Gatilho para a pasta de observabilidade
       - ".github/workflows/cicd-services.yml"
       - ".github/workflows/_reusable-cicd.yml"
   workflow_dispatch:
@@ -62,13 +56,14 @@ jobs:
     name: Detectar mudanças
     runs-on: ubuntu-latest
     outputs:
-      auth:       ${{ steps.filter.outputs.auth }}
-      flag:       ${{ steps.filter.outputs.flag }}
-      targeting:  ${{ steps.filter.outputs.targeting }}
-      evaluation: ${{ steps.filter.outputs.evaluation }}
-      analytics:  ${{ steps.filter.outputs.analytics }}
+      auth:         ${{ steps.filter.outputs.auth }}
+      flag:         ${{ steps.filter.outputs.flag }}
+      targeting:    ${{ steps.filter.outputs.targeting }}
+      evaluation:   ${{ steps.filter.outputs.evaluation }}
+      analytics:    ${{ steps.filter.outputs.analytics }}
       self_healing: ${{ steps.filter.outputs.self_healing }}
-      force_all:  ${{ steps.compute.outputs.force_all }}
+      observability: ${{ steps.filter.outputs.observability }} # ◄ ADICIONADO: Output do filtro
+      force_all:    ${{ steps.compute.outputs.force_all }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -98,6 +93,8 @@ jobs:
             self_healing:
               - 'services/self-healing-webhook/**'
               - 'gitops/base/self-healing/**'
+            observability:              # ◄ ADICIONADO: Mapeamento da pasta do GitOps de Observabilidade
+              - 'observability/**'
 
       - name: Computar "rodar todos"
         id: compute
@@ -111,6 +108,13 @@ jobs:
              grep -q '.github/workflows/_reusable-cicd.yml'; then
             FORCE=true
           fi
+          
+          # Se houver mudanças na pasta de observabilidade, força a execução/validação dos serviços 
+          # (ou você pode usar essa condicional para acionar tarefas específicas do self-healing)
+          if [ "${{ steps.filter.outputs.observability }}" = "true" ]; then
+            FORCE=true
+          fi
+
           echo "force_all=$FORCE" >> "$GITHUB_OUTPUT"
           echo "Rodar todos? $FORCE"
 
@@ -227,16 +231,14 @@ jobs:
     needs: detect-changes
     if: >-
       needs.detect-changes.outputs.force_all == 'true' ||
-      needs.detect-changes.outputs.self_healing == 'true'
+      needs.detect-changes.outputs.self_healing == 'true' ||
+      needs.detect-changes.outputs.observability == 'true' # ◄ ADICIONADO: Se mudar a observabilidade, também roda o self-healing
     uses: ./.github/workflows/_reusable-cicd.yml
     with:
       service: self-healing-webhook
       language: python
       ecr_repository: togglemaster-self-healing-webhook
       gitops_path: gitops/base/self-healing/deployment.yaml
-      # IMPORTANTE: a pasta deste serviço é "services/self-healing-webhook"
-      # (sem o sufixo "-service" dos outros). Por isso passamos service_dir
-      # explícito; sem ele o reusable procuraria "self-healing-webhook-service".
       service_dir: services/self-healing-webhook
     secrets:
       AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
