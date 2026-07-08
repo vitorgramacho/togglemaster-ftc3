@@ -20,3 +20,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.30.0
 	go.opentelemetry.io/otel/sdk/metric v1.30.0
 )
+
+
+require google.golang.org/grpc v1.79.3
+
+replace google.golang.org/grpc => google.golang.org/grpc v1.79.3
