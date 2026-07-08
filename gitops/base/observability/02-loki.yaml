@@ -7,7 +7,7 @@
 #
 # Por que NÃO usar Promtail neste projeto:
 #   - O OpenTelemetry Collector (próximo Application) já coleta logs dos
-#     pods via filelogreceiver e envia para o Loki com o lokiexporter.
+#     pods via filelogreceiver e envia para o Loki com o lokiexporter. 
 #   - Isso mantém a stack OTel-first: 1 agent para métricas+traces+logs.
 # =============================================================================
 apiVersion: argoproj.io/v1alpha1
