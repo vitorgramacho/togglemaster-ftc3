@@ -20,7 +20,7 @@
 #   - Só restarta deployments dos namespaces *-namespace (regex hardcoded)
 #   - Rate-limit: máximo 1 restart por deployment a cada 5 minutos
 #     (evita "self-DDoS" se o alerta ficar oscilando)
-# ==============================================================================
+# =============================================================================
 
 import json
 import logging
@@ -36,7 +36,7 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 # -----------------------------------------------------------------------------
-# Logging em JSON (1 evento = 1 linha) — formato escolhido para o Loki indexar  
+# Logging em JSON (1 evento = 1 linha) — formato escolhido para o Loki indexar
 # -----------------------------------------------------------------------------
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -92,17 +92,49 @@ def _within_rate_limit(deployment_key: str) -> bool:
 
 
 # -----------------------------------------------------------------------------
-# K8s client (in-cluster: usa o token do SA montado em /var/run/secrets)
+# K8s client — inicialização LAZY e resiliente
 # -----------------------------------------------------------------------------
-try:
-    config.load_incluster_config()
-    log.info("k8s_config_loaded", extra={"extra_data": {"mode": "in-cluster"}})
-except config.ConfigException:
-    # Fallback útil pra rodar em laptop com KUBECONFIG
-    config.load_kube_config()
-    log.info("k8s_config_loaded", extra={"extra_data": {"mode": "kubeconfig"}})
+# ATENÇÃO (correção de bug): antes, a config do K8s era carregada no import do
+# módulo. Se o token do ServiceAccount ainda não estivesse montado, ou se
+# nenhuma config fosse encontrada, o processo MORRIA no arranque -> o pod ia
+# para CrashLoopBackOff e o ArgoCD marcava a Application como "Degraded".
+#
+# Agora o cliente é criado SOB DEMANDA (na primeira chamada que precisa dele) e
+# qualquer falha é tratada como erro da operação, NUNCA derruba o processo.
+# Assim o servidor HTTP e o endpoint /health sempem sempre -> a readiness/liveness
+# probe passa -> o ArgoCD vê o pod como Healthy.
+_apps_v1 = None
+_k8s_init_error: str | None = None
 
-apps_v1 = client.AppsV1Api()
+
+def _get_apps_api():
+    """Retorna o AppsV1Api, inicializando o cliente K8s na primeira chamada.
+
+    Retorna (api, None) em sucesso ou (None, mensagem_de_erro) em falha.
+    Nunca lança — a falha vira uma resposta de erro, não um crash.
+    """
+    global _apps_v1, _k8s_init_error
+    if _apps_v1 is not None:
+        return _apps_v1, None
+
+    try:
+        config.load_incluster_config()
+        log.info("k8s_config_loaded", extra={"extra_data": {"mode": "in-cluster"}})
+    except Exception as in_cluster_err:  # noqa: BLE001 — precisamos capturar tudo
+        # Fallback para kubeconfig (útil só em execução local, fora do cluster)
+        try:
+            config.load_kube_config()
+            log.info("k8s_config_loaded", extra={"extra_data": {"mode": "kubeconfig"}})
+        except Exception as kubeconfig_err:  # noqa: BLE001
+            _k8s_init_error = (
+                f"não foi possível carregar config do K8s: "
+                f"in-cluster={in_cluster_err}; kubeconfig={kubeconfig_err}"
+            )
+            log.error("k8s_config_failed", extra={"extra_data": {"error": _k8s_init_error}})
+            return None, _k8s_init_error
+
+    _apps_v1 = client.AppsV1Api()
+    return _apps_v1, None
 
 
 def restart_deployment(namespace: str, deployment: str) -> tuple[bool, str]:
@@ -117,6 +149,10 @@ def restart_deployment(namespace: str, deployment: str) -> tuple[bool, str]:
     deployment_key = f"{namespace}/{deployment}"
     if _within_rate_limit(deployment_key):
         return False, f"rate-limited ({RATE_LIMIT_SECONDS}s) para {deployment_key}"
+
+    apps_v1, init_err = _get_apps_api()
+    if apps_v1 is None:
+        return False, f"cliente K8s indisponível: {init_err}"
 
     timestamp = datetime.now(timezone.utc).isoformat()
     patch = {
