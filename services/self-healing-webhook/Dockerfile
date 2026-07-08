@@ -13,13 +13,19 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Usuário não-root (boas práticas de container)
-RUN groupadd -r app && useradd -r -g app -d /app app \
+# Usuário não-root com UID/GID NUMÉRICO FIXO (10001).
+# IMPORTANTE: o Kubernetes com `runAsNonRoot: true` NÃO consegue verificar que
+# um usuário criado só por NOME não é root — ele exige um UID numérico para
+# garantir isso. Sem o UID numérico, o kubelet recusa criar o container com
+# "container has runAsNonRoot and image has non-numeric user" (CreateContainerConfigError).
+RUN groupadd -r -g 10001 app && useradd -r -u 10001 -g app -d /app app \
     && chown -R app:app /app
 
 COPY --chown=app:app main.py .
 
-USER app
+# Referencia o usuário pelo UID numérico (e não pelo nome) — é isto que o
+# securityContext runAsNonRoot precisa para validar.
+USER 10001
 
 EXPOSE 8080
 
