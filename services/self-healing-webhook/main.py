@@ -36,7 +36,7 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 # -----------------------------------------------------------------------------
-# Logging em JSON (1 evento = 1 linha) — formato escolhido para o Loki indexar
+# Logging em JSON (1 evento = 1 linha) — formato escolhido para o Loki indexar  
 # -----------------------------------------------------------------------------
 class JsonFormatter(logging.Formatter):
     def format(self, record):
