@@ -85,7 +85,7 @@ spec:
         - name: webhook
           # ESTA LINHA É ATUALIZADA AUTOMATICAMENTE PELO CI (sed) igual aos
           # demais microsserviços.
-          image: 050501494944.dkr.ecr.us-east-1.amazonaws.com/togglemaster-self-healing-webhook:v1.0.0-a513764
+          image: 050501494944.dkr.ecr.us-east-1.amazonaws.com/togglemaster-self-healing-webhook:v1.0.0-cd6b221
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
