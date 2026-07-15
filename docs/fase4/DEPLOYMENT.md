@@ -79,13 +79,13 @@ kubectl -n observability create secret generic datadog-secret \
 
 ### 2.2 Alertmanager → PagerDuty (`alertmanager-pagerduty-config`)
 
-O arquivo em `gitops/base/observability/05-alertmanager-config.yaml` contém um **placeholder** literal `PAGERDUTY_INTEGRATION_KEY`. Substitua e aplique:
+O arquivo em `gitops/templates/alertmanager-pagerduty-config.template.yaml` contém um **placeholder** literal `PAGERDUTY_INTEGRATION_KEY`. Substitua e aplique:
 
 ```bash
 export PD_KEY="suaIntegrationKeyDoPagerDuty"
 
 sed "s/PAGERDUTY_INTEGRATION_KEY/$PD_KEY/g" \
-  gitops/base/observability/05-alertmanager-config.yaml \
+  gitops/templates/alertmanager-pagerduty-config.template.yaml \
   | kubectl apply -f -
 ```
 

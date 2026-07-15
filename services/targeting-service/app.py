@@ -3,13 +3,12 @@ import sys
 import psycopg2
 import requests
 import json
-import logging
 from psycopg2.extras import RealDictCursor, Json
 from psycopg2.pool import SimpleConnectionPool
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from functools import wraps
-from telemetry import init_telemetry
+import logging
 
 # Configura o loggingg
 logging.basicConfig(level=logging.INFO)
@@ -20,10 +19,10 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# =============================================================================
+# ============================================================================
 # OpenTelemetry — Fase 4 (Tech Challenge PosTech)
 # ============================================================================
-
+from telemetry import init_telemetry
 init_telemetry(flask_app=app, service_name="targeting-service")
 
 # --- Configuração ---

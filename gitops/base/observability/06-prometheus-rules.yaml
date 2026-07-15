@@ -24,6 +24,23 @@ kind: PrometheusRule
 metadata:
   name: togglemaster-alerts
   namespace: observability
+  annotations:
+    # ═════════════════════════════════════════════════════════════════════════
+    # CORREÇÃO CRÍTICA (ovo-e-galinha de CRD):
+    # O kind "PrometheusRule" é um CRD que SÓ EXISTE depois que o
+    # kube-prometheus-stack (Application filha 01-) for instalado. Na PRIMEIRA
+    # sincronização do app-of-apps, o dry-run deste recurso falharia com
+    # "kind desconhecido" e ABORTARIA O SYNC INTEIRO — nenhuma Application
+    # filha seria criada e a stack ficaria OutOfSync para sempre.
+    #
+    # SkipDryRunOnMissingResource: pula o dry-run quando o CRD ainda não
+    #   existe, permitindo que o resto do diretório sincronize normalmente.
+    # sync-wave "2": aplica este recurso por último, depois das Applications
+    #   filhas (wave 0/1), dando tempo do CRD ser instalado. O retry da
+    #   syncPolicy cuida de reaplicar até o CRD existir.
+    # ═════════════════════════════════════════════════════════════════════════
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "2"
   labels:
     # Necessário para o Prometheus do kube-prometheus-stack pegar a regra
     release: kps

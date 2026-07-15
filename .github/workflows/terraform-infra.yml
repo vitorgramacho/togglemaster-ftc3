@@ -400,7 +400,7 @@ jobs:
           # Substitui o placeholder do arquivo versionado pela chave real e
           # aplica direto no cluster. O arquivo no Git permanece com o placeholder.
           sed "s/PAGERDUTY_INTEGRATION_KEY/${PD_KEY}/g" \
-            gitops/base/observability/05-alertmanager-config.yaml \
+            gitops/templates/alertmanager-pagerduty-config.template.yaml \
             | kubectl apply -f -
           echo "Secret alertmanager-pagerduty-config aplicado."
 

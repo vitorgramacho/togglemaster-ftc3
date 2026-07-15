@@ -335,7 +335,7 @@ export PD_KEY="suaIntegrationKeyDoPagerDuty"
 
 # Substitui o placeholder pela chave real e aplica no cluster
 sed "s/PAGERDUTY_INTEGRATION_KEY/$PD_KEY/g" \
-  gitops/base/observability/05-alertmanager-config.yaml \
+  gitops/templates/alertmanager-pagerduty-config.template.yaml \
   | kubectl apply -f -
 ```
 
@@ -403,18 +403,38 @@ O ArgoCD é quem realmente implanta tudo no cluster, lendo do seu Git. Vamos abr
 
 **Passo a passo:**
 
+Primeiro, **espere o ArgoCD ficar pronto** (isto evita o erro "connection reset by peer" que acontece se você tentar conectar antes do pod subir):
+
+```bash
+kubectl -n argocd wait --for=condition=ready pod \
+  -l app.kubernetes.io/name=argocd-server --timeout=180s
+```
+
+Quando aparecer `condition met`, abra o túnel:
+
 ```bash
 # Abre um túnel para o painel do ArgoCD (deixe rodando num terminal separado)
 kubectl -n argocd port-forward svc/argocd-server 8080:80
+```
 
+```bash
 # Em outro terminal, pegue a senha inicial do admin
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d ; echo
 ```
 
-Agora abra no navegador: **https://localhost:8080**
+Agora abra no navegador: **http://localhost:8080**
 - Usuário: `admin`
 - Senha: a que apareceu no comando acima
+
+> ⚠️ **Use `http://`, não `https://`.** Este projeto configura o ArgoCD em modo
+> `--insecure` (sem TLS) para simplificar. Se você mapeou a porta `:80`, o
+> endereço é **http**://localhost:8080. Digitar `https://` aí resulta em erro
+> de conexão.
+
+> 🔧 **Se der "connection reset by peer" ou "lost connection to pod":** veja a
+> seção de [solução de problemas](#14-solução-de-problemas) — quase sempre é o
+> pod ainda inicializando ou você usou o protocolo errado (http vs https).
 
 **No painel você verá várias "Applications":**
 
@@ -580,7 +600,12 @@ kubectl -n evaluation-namespace patch deployment evaluation-service \
 | Alertmanager: "no configuration loaded" | Esqueceu de substituir a chave do PagerDuty | Refaça o `sed ... | kubectl apply` (Etapa 6.4) |
 | Discord não recebe nada | URL do webhook sem `/slack` no final | Edite a Extension no PagerDuty (Etapa 9) |
 | Dashboard do Grafana vazio | Sem tráfego ainda | Gere requisições (Etapa 10.4) e aguarde ~1 min |
+| **Self-healing "Degraded" / `CreateContainerConfigError`** | Imagem com usuário não-numérico + `runAsNonRoot` (kubelet não valida user) | Rebuild com a imagem corrigida (usa `USER 10001`). Erro típico: "image has non-numeric user (app)" |
+| Self-healing "Degraded" por CrashLoop | Pod crashava no boot se o cliente K8s não carregasse | Use a imagem com o fix (servidor sobe mesmo sem K8s config); `kubectl -n observability logs -l app=self-healing-webhook` |
 | Self-healing não reage | RBAC ou label faltando | `kubectl -n observability logs deploy/self-healing-webhook` para ver o erro |
+| **ArgoCD: "connection reset by peer" / "lost connection to pod"** | Pod ainda inicializando | Espere ficar pronto: `kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=180s` e tente de novo |
+| **ArgoCD: página não abre / erro de conexão no navegador** | Usou `https://` com a porta `:80` (modo insecure é http) | Acesse `http://localhost:8080` (com `:80`), ou troque para `8080:443` e use `https://` |
+| **ArgoCD: port-forward cai repetidamente** | Instabilidade no service | Encaminhe direto no pod: `kubectl -n argocd port-forward deploy/argocd-server 8080:8080` → `http://localhost:8080` |
 
 **Comandos úteis de diagnóstico:**
 
@@ -619,7 +644,7 @@ terraform destroy
 
 | O quê | Como acessar | Credenciais |
 |---|---|---|
-| **ArgoCD** | `kubectl -n argocd port-forward svc/argocd-server 8080:80` → https://localhost:8080 | admin / (comando da Etapa 8) |
+| **ArgoCD** | `kubectl -n argocd port-forward svc/argocd-server 8080:80` → http://localhost:8080 | admin / (comando da Etapa 8) |
 | **Grafana** | `kubectl -n observability port-forward svc/kps-grafana 3000:80` → http://localhost:3000 | admin / postech2026 |
 | **Prometheus** | `kubectl -n observability port-forward svc/kps-kube-prometheus-stack-prometheus 9090:9090` → http://localhost:9090 | — |
 | **Aplicação** | `kubectl -n ingress-nginx get svc ingress-nginx-controller` (pegue o hostname) | — |

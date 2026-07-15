@@ -81,12 +81,24 @@ spec:
         prometheus.io/scrape: "false"
     spec:
       serviceAccountName: self-healing-webhook
+      # Garante que o token do SA seja montado (é o que o load_incluster_config
+      # usa para autenticar na API do K8s). É o default, mas explicitamos.
+      automountServiceAccountToken: true
+      # Com readOnlyRootFilesystem=true, o processo não pode escrever no "/".
+      # Alguns componentes (cliente K8s, libs) podem querer escrever em /tmp.
+      # Um emptyDir dá um /tmp gravável sem abrir mão do rootfs read-only.
+      volumes:
+        - name: tmp
+          emptyDir: {}
       containers:
         - name: webhook
           # ESTA LINHA É ATUALIZADA AUTOMATICAMENTE PELO CI (sed) igual aos
           # demais microsserviços.
-          image: 050501494944.dkr.ecr.us-east-1.amazonaws.com/togglemaster-self-healing-webhook:v1.0.0-cd6b221
+          image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-self-healing-webhook:v1.0.0-fase4
           imagePullPolicy: Always
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           ports:
             - containerPort: 8080
               name: http
@@ -112,6 +124,12 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
+            # UID/GID numéricos EXPLÍCITOS (batem com o Dockerfile). Sem isto,
+            # com runAsNonRoot=true e usuário criado por nome na imagem, o
+            # kubelet não consegue verificar que não é root e recusa o container
+            # com CreateContainerConfigError.
+            runAsUser: 10001
+            runAsGroup: 10001
             capabilities:
               drop: ["ALL"]
 

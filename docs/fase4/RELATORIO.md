@@ -175,7 +175,7 @@ Para manter o incidente como **single source of truth** com MTTA/MTTR auditávei
 | Distributed Tracing | `WrapTransport` em `telemetry.go` + `HttpClient` do evaluation-service |
 | Service Map | OTel → Datadog (todos os 5 com `DD_SERVICE` setado) |
 | Alerta inteligente | `gitops/base/observability/06-prometheus-rules.yaml` (`HighHttpErrorRate`) |
-| Integração PagerDuty | `gitops/base/observability/05-alertmanager-config.yaml` |
+| Integração PagerDuty | `gitops/templates/alertmanager-pagerduty-config.template.yaml` |
 | Discord notification | PagerDuty Service Extension (config fora do Git) |
 | Self-Healing automático | `services/self-healing-webhook/main.py` + `gitops/base/self-healing/` |
 

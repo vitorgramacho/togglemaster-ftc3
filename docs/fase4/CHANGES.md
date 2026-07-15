@@ -93,7 +93,7 @@ Tudo é entregue via **GitOps**: cada nova ferramenta é uma `Application` do Ar
 | `02-loki.yaml` | Loki em SingleBinary com gateway nginx | Modo enxuto para o AWS Academy; gateway dá 1 endpoint estável |
 | `03-otel-collector.yaml` | OpenTelemetry Collector contrib em DaemonSet | **Peça central exigida pelo enunciado**: roteia 3 sinais |
 | `04-datadog.yaml` | Datadog Cluster Agent + Node Agent | APM, Service Map e Live Containers |
-| `05-alertmanager-config.yaml` | Secret com configuração do Alertmanager → PagerDuty | Roteamento e inibição de alertas |
+| `../../templates/alertmanager-pagerduty-config.template.yaml` | Template do Secret Alertmanager → PagerDuty (aplicado com a chave real via workflow/manual; fica FORA do path do ArgoCD para o selfHeal não sobrescrever a chave com o placeholder) | Roteamento e inibição de alertas |
 | `06-prometheus-rules.yaml` | PrometheusRule com 6 alertas customizados | Cenário do enunciado (taxa de 5xx) + alertas complementares |
 | `07-grafana-dashboard.yaml` | ConfigMap com dashboard JSON do Grafana | Requisito: dashboard custom centralizando cluster + RPS + logs |
 | `08-self-healing-app.yaml` | Application do ArgoCD para o webhook | Aponta para `gitops/base/self-healing/` |
@@ -297,6 +297,63 @@ Detalhes da implementação que importam:
 
 A integração **PagerDuty → Discord permanece manual** de propósito: é configurada na UI do PagerDuty (uma Extension com a URL do webhook do Discord) e não há API de Kubernetes que a represente.
 
+### Como tratamos a CVE-2026-33186 (gRPC) que bloqueou o CI
+
+O scan de segurança do pipeline (Trivy, com `exit-code: 1` em CRITICAL) passou a **bloquear** o build do auth-service e do evaluation-service ao detectar a **CVE-2026-33186** (CVSS 9.1, authorization bypass) em `google.golang.org/grpc v1.66.1`. Essa versão de gRPC entra como **dependência transitiva** do SDK OpenTelemetry — mesmo usando só os exporters OTLP/HTTP, o pacote `otlptracehttp` importa gRPC internamente (ver open-telemetry/opentelemetry-go#2579).
+
+Análise de exploitabilidade: a CVE só afeta servidores gRPC que usam interceptors de autorização por path (`grpc/authz`). Nossos serviços **não iniciam servidor gRPC nem usam authz** — logo, não são exploráveis na prática. Mesmo assim, corrigimos de verdade, atualizando a dependência.
+
+**Solução:** forçar `google.golang.org/grpc v1.79.3` (versão corrigida) no `go.mod` dos dois serviços Go, com **duas diretivas combinadas**:
+
+```
+require google.golang.org/grpc v1.79.3
+replace google.golang.org/grpc => google.golang.org/grpc v1.79.3
+```
+
+Por que `replace` e não só `require`? Um `require` define apenas o piso mínimo, e nenhuma release do OTel SDK traz grpc ≥ v1.79.3 por padrão ainda (o OTel v1.38 usa grpc v1.75.1, também anterior à correção). O `replace` **força** a versão corrigida em todo o grafo de dependências — inclusive nas referências transitivas do OTel — garantindo que o binário final não embarque a versão vulnerável e que o Trivy não encontre a CVE.
+
+É seguro porque a aplicação não chama a API do gRPC diretamente; apenas os exporters HTTP do OTel a usam internamente (marshalling proto), e o gRPC mantém compatibilidade retroativa dentro da série v1.x. O `go mod tidy` executado no Dockerfile resolve automaticamente as dependências transitivas que o gRPC v1.79.3 exige (protobuf, x/net etc.).
+
+Não usamos `.trivyignore`: a vulnerabilidade foi **efetivamente removida** do binário, não apenas silenciada. A política "CRITICAL bloqueia o pipeline" continua valendo integralmente para qualquer vulnerabilidade real.
+
+### Por que o `observability-stack` ficava OutOfSync sem nunca criar as Applications filhas (3 correções)
+
+Sintoma observado no cluster: `observability-stack` permanentemente **OutOfSync** (Healthy), e `kubectl -n argocd get applications` **não mostrava** as filhas (loki, kube-prometheus-stack, datadog, opentelemetry-collector) — nenhum pod da stack subia. Três problemas combinados:
+
+**1. Ovo-e-galinha de CRD (a causa do sync abortar).** O `06-prometheus-rules.yaml` é um `PrometheusRule` — CRD que só existe depois que o kube-prometheus-stack for instalado… pelo próprio sync que estava falhando. O ArgoCD faz *dry-run* de todos os recursos antes de aplicar; o dry-run do PrometheusRule falhava com "kind desconhecido" e **abortava o sync inteiro** — nenhuma filha era criada. Com o `retry.limit: 10` esgotado, ficava OutOfSync para sempre.
+*Correção:* anotação `argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true` no PrometheusRule (pula o dry-run enquanto o CRD não existe) + `sync-wave: "2"` (aplica por último). Também adicionamos sync-waves aos demais recursos (namespace na wave -1, Applications filhas nas waves 0/1) para ordem de criação determinística.
+
+**2. Applications duplicadas com repoURL placeholder (bomba-relógio).** `_app-of-apps.yaml` e `08-self-healing-app.yaml` estavam DENTRO do diretório sincronizado e definiam Applications que o **Terraform já cria** — com `repoURL: https://github.com/SEU-USUARIO/...` (placeholder). Assim que o sync passasse a funcionar, o ArgoCD aplicaria esses arquivos e **sobrescreveria as Applications reais** com um repositório inexistente, derrubando a stack e o self-healing.
+*Correção:* arquivos **removidos** do diretório. O Terraform (`modules/argocd/main.tf`) é o único dono das duas Applications top-level.
+
+**3. Secret do Alertmanager seria sobrescrito pelo placeholder (bug silencioso).** O `05-alertmanager-config.yaml` continha o Secret com o placeholder `PAGERDUTY_INTEGRATION_KEY` e estava no path sincronizado com `selfHeal: true`. O usuário aplica o secret real (com a chave verdadeira) manualmente ou via workflow — mas o ArgoCD passaria a **reverter o secret para o placeholder** a cada reconciliação. O PagerDuty nunca receberia incidentes, sem nenhum erro visível.
+*Correção:* arquivo movido para `gitops/templates/alertmanager-pagerduty-config.template.yaml`, **fora** de qualquer path do ArgoCD. O workflow (`terraform-infra.yml`) e o guia foram atualizados para o novo caminho.
+
+### Por que o self-healing-webhook aparecia "Degraded" no ArgoCD (e a correção)
+
+Foram **dois** problemas distintos, corrigidos:
+
+**Problema 1 — `CreateContainerConfigError`: "image has non-numeric user".**
+O erro real observado no cluster foi:
+```
+Error: container has runAsNonRoot and image has non-numeric user (app),
+cannot verify user is non-root
+```
+O Dockerfile criava o usuário `app` **por nome** e usava `USER app`. Com `runAsNonRoot: true` no securityContext, o kubelet precisa **provar** que o UID não é 0 (root) antes de subir o container — e ele só consegue fazer isso com um **UID numérico**. Como a imagem trazia um usuário nomeado, o kubelet recusava o container (`CreateContainerConfigError`), o pod nunca saía de `Pending` e o ArgoCD marcava a Application como **Degraded**.
+
+Correção: criar o usuário com **UID/GID numérico fixo** (`useradd -u 10001`) e referenciá-lo por número (`USER 10001`) no Dockerfile; além disso, declarar `runAsUser: 10001` e `runAsGroup: 10001` explícitos no securityContext do deployment (dupla proteção).
+
+**Problema 2 — crash no boot se o cliente K8s não inicializasse.**
+Preventivamente, também tornamos a inicialização do cliente Kubernetes resiliente. Antes, a config era carregada no import do módulo e o `except` só cobria o `load_incluster_config` (não o fallback). Se o cliente não inicializasse no arranque, o processo morria → `CrashLoopBackOff` → Degraded. Agora a config é carregada **sob demanda**, qualquer exceção vira erro tratado, e o servidor HTTP + `/health` sobem sempre (validado rodando o `main.py` sem config do K8s: `/health` respondeu `200`). Também adicionamos um `emptyDir` em `/tmp` (para o filesystem read-only) e `automountServiceAccountToken: true` explícito.
+
+### Auditoria da observabilidade — Loki não aceitaria logs via OTLP
+
+Numa revisão da stack de observabilidade, encontramos um problema que deixaria o **painel de logs do dashboard vazio**: o Loki estava com schema v13 + tsdb (pré-requisito), mas faltava `allow_structured_metadata: true` no `limits_config`.
+
+Quando o OTel Collector empurra logs via OTLP, os atributos de recurso do Kubernetes (`k8s.namespace.name`, `k8s.pod.name` etc.) chegam ao Loki como *structured metadata*. Sem esse flag habilitado, o Loki **rejeita o payload OTLP como malformado** e nenhum log é ingerido. Embora o default seja `true` no Loki 3.x, deixamos **explícito** para não depender da versão do chart. Também habilitamos `volume_enabled: true`.
+
+Confirmamos, na documentação oficial do Loki, que o mapeamento OTLP→Loki converte `k8s.namespace.name` no label `k8s_namespace_name` (pontos viram underscores) e que esse atributo está na lista de index labels padrão — ou seja, a query do dashboard `{k8s_namespace_name=~".*-namespace"}` está correta. Também verificamos que o uid do datasource Prometheus usado no dashboard (`"uid": "prometheus"`) bate com o default do kube-prometheus-stack, e que os nomes de service (`kps-*`, `loki-gateway`), o label `release: kps` das PrometheusRules e o label `grafana_dashboard: "1"` do ConfigMap estão todos consistentes.
+
 ---
 
 ## 6. Mapeamento requisito → entregável
@@ -312,6 +369,6 @@ A integração **PagerDuty → Discord permanece manual** de propósito: é conf
 | Distributed Tracing | `WrapTransport` no `http.Client` do evaluation-service propaga `traceparent` |
 | Service Map | OTLP traces → Datadog (com 5 serviços rotulados em DD_SERVICE) |
 | Alerta inteligente | `gitops/base/observability/06-prometheus-rules.yaml` → `HighHttpErrorRate` (taxa 5xx > 5%) |
-| Integração PagerDuty | `gitops/base/observability/05-alertmanager-config.yaml` |
+| Integração PagerDuty | `gitops/templates/alertmanager-pagerduty-config.template.yaml` |
 | Notificação no Discord | PagerDuty Service Extension (configurado fora do Git, ver `docs/fase4/DEPLOYMENT.md`) |
 | Self-Healing automático | `services/self-healing-webhook/main.py` + `gitops/base/self-healing/deployment.yaml` |
