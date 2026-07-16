@@ -17,7 +17,7 @@ metadata:
     tags.datadoghq.com/env: production
     tags.datadoghq.com/version: "1.0.0"
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: auth-service
@@ -41,7 +41,7 @@ spec:
       containers:
         - name: auth-service
           # ESTA LINHA É ATUALIZADA AUTOMATICAMENTE PELO CI (sed).
-          image: 639330393601.dkr.ecr.us-east-1.amazonaws.com/togglemaster-auth:v1.0.0-6ecf425
+          image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-auth:v1.0.0-38fa1b3
           imagePullPolicy: Always
           ports:
             - containerPort: 8001

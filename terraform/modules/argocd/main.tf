@@ -109,12 +109,24 @@ spec:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
+      # Faz o sync RESPEITAR o ignoreDifferences abaixo (sem isto, o sync
+      # ainda aplicaria o replicas do Git por cima do valor do HPA).
+      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff:
         duration: 10s
         factor: 2
         maxDuration: 3m
+  # O campo spec.replicas dos Deployments é gerido pelo HPA em runtime.
+  # Sem isto, com selfHeal:true o ArgoCD reverteria a escala do HPA para o
+  # valor do Git a cada reconciliação (HPA sobe 1->3, ArgoCD derruba para 1),
+  # quebrando o autoscaling na prática.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
 YAML
 
   depends_on = [helm_release.argocd]

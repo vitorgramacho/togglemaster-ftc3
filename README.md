@@ -89,7 +89,7 @@ kubectl -n observability create secret generic datadog-secret \
 
 # 3. Aplicar config do Alertmanager com a chave do PagerDuty
 sed "s/PAGERDUTY_INTEGRATION_KEY/$PD_KEY/g" \
-  gitops/base/observability/05-alertmanager-config.yaml \
+  gitops/templates/alertmanager-pagerduty-config.template.yaml \
   | kubectl apply -f -
 
 # 4. Aguardar ArgoCD sincronizar (3-5 min)

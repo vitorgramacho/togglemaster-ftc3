@@ -9,7 +9,7 @@ metadata:
     tags.datadoghq.com/env: production
     tags.datadoghq.com/version: "1.0.0"
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: targeting-service
