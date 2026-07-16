@@ -8,6 +8,7 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from functools import wraps
 from telemetry import init_telemetry
+from telemetry import init_telemetry
 import logging
 import subprocess
 
@@ -28,7 +29,6 @@ subprocess.call('echo flag-service iniciado', shell=True)
 # (auto-instrumenta o app) e ANTES de qualquer rota ser chamada. Aqui é o
 # local correto: logo após instanciar o Flask, antes dos @app.route.
 # ============================================================================
-from telemetry import init_telemetry
 init_telemetry(flask_app=app, service_name="flag-service")
 
 # --- Configuração ---
