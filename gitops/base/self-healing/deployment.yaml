@@ -94,7 +94,7 @@ spec:
         - name: webhook
           # ESTA LINHA É ATUALIZADA AUTOMATICAMENTE PELO CI (sed) igual aos
           # demais microsserviços.
-          image: 604720765096.dkr.ecr.us-east-1.amazonaws.com/togglemaster-self-healing-webhook:v1.0.0-fase4
+          image: 639330393601.dkr.ecr.us-east-1.amazonaws.com/togglemaster-self-healing-webhook:v1.0.0-fc5ebb0
           imagePullPolicy: Always
           volumeMounts:
             - name: tmp
