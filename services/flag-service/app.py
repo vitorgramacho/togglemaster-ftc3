@@ -8,7 +8,6 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from functools import wraps
 from telemetry import init_telemetry
-from telemetry import init_telemetry
 import logging
 import subprocess
 
