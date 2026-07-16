@@ -16,7 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
-	// Fase 4 — instrumentação OpenTelemetry
+	// Fase 4 — instrumentação OpenTelemetryy
 	"evaluation-service/telemetry"
 )
 

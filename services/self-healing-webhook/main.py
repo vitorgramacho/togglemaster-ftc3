@@ -80,7 +80,6 @@ LISTEN_PORT = int(os.getenv("LISTEN_PORT", "8080"))
 _recent_actions: dict[str, float] = {}
 _lock = Lock()
 
-
 def _within_rate_limit(deployment_key: str) -> bool:
     """True se este deployment foi restartado RECENTEMENTE (não pode de novo)."""
     with _lock:
@@ -89,7 +88,6 @@ def _within_rate_limit(deployment_key: str) -> bool:
             return True
         _recent_actions[deployment_key] = time.time()
         return False
-
 
 # -----------------------------------------------------------------------------
 # K8s client — inicialização LAZY e resiliente
@@ -105,7 +103,6 @@ def _within_rate_limit(deployment_key: str) -> bool:
 # probe passa -> o ArgoCD vê o pod como Healthy.
 _apps_v1 = None
 _k8s_init_error: str | None = None
-
 
 def _get_apps_api():
     """Retorna o AppsV1Api, inicializando o cliente K8s na primeira chamada.
@@ -135,7 +132,6 @@ def _get_apps_api():
 
     _apps_v1 = client.AppsV1Api()
     return _apps_v1, None
-
 
 def restart_deployment(namespace: str, deployment: str) -> tuple[bool, str]:
     """
@@ -267,7 +263,6 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
         self._respond(200, {"status": "ok", "actions": actions})
 
-
 def main():
     server = HTTPServer(("0.0.0.0", LISTEN_PORT), WebhookHandler)
     log.info(
@@ -281,7 +276,6 @@ def main():
         },
     )
     server.serve_forever()
-
 
 if __name__ == "__main__":
     main()

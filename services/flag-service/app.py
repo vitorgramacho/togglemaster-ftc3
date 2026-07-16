@@ -7,6 +7,7 @@ from psycopg2.pool import SimpleConnectionPool
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from functools import wraps
+from telemetry import init_telemetry
 import logging
 import subprocess
 
@@ -76,13 +77,11 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated
 
-
 # --- Endpoints da API ---
 
 @app.route('/health')
 def health():
     return jsonify({"status": "ok"})
-
 
 @app.route('/flags', methods=['POST'])
 @require_auth
@@ -126,7 +125,6 @@ def create_flag():
         if conn:
             pool.putconn(conn)
 
-
 @app.route('/flags', methods=['GET'])
 @require_auth
 def get_flags():
@@ -147,7 +145,6 @@ def get_flags():
             cur.close()
         if conn:
             pool.putconn(conn)
-
 
 @app.route('/flags/<string:name>', methods=['GET'])
 @require_auth
@@ -171,7 +168,6 @@ def get_flag(name):
             cur.close()
         if conn:
             pool.putconn(conn)
-
 
 @app.route('/flags/<string:name>', methods=['PUT'])
 @require_auth
@@ -222,7 +218,6 @@ def update_flag(name):
         if conn:
             pool.putconn(conn)
 
-
 @app.route('/flags/<string:name>', methods=['DELETE'])
 @require_auth
 def delete_flag(name):
@@ -250,7 +245,6 @@ def delete_flag(name):
             cur.close()
         if conn:
             pool.putconn(conn)
-
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8002))

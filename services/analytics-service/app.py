@@ -9,14 +9,13 @@ import boto3
 from botocore.exceptions import NoCredentialsError, ClientError
 from flask import Flask, jsonify
 from dotenv import load_dotenv
+from telemetry import init_telemetry
 
 # Configura o logging    
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
-
 load_dotenv()
-
 
 # --- Configuração ----
 AWS_REGION = os.getenv("AWS_REGION")
@@ -26,7 +25,6 @@ DYNAMODB_TABLE_NAME = os.getenv("AWS_DYNAMODB_TABLE")
 if not all([AWS_REGION, SQS_QUEUE_URL, DYNAMODB_TABLE_NAME]):
     log.critical("Erro: AWS_REGION, AWS_SQS_URL, e AWS_DYNAMODB_TABLE devem ser definidos.")
     sys.exit(1)
-
 
 try:
     LOCALSTACK_ENDPOINT = os.getenv("LOCALSTACK_ENDPOINT")
@@ -53,7 +51,6 @@ except NoCredentialsError:
 except Exception as e:
     log.critical(f"Erro ao inicializar o Boto3: {e}")
     sys.exit(1)
-
 
 # --- SQS Worker ---
 
@@ -95,7 +92,6 @@ def process_message(message):
         log.error(f"Erro inesperado ao processar {message['MessageId']}: {e}")
         # Não deleta a mensagem, tenta novamente
 
-
 def sqs_worker_loop():
     """ Loop principal do worker que ouve a fila SQS """
     log.info("Iniciando o worker SQS...")
@@ -124,8 +120,6 @@ def sqs_worker_loop():
             log.error(f"Erro inesperado no loop principal do SQS: {e}")
             time.sleep(10)
 
-
-
 app = Flask(__name__)
 
 # ============================================================================
@@ -136,21 +130,16 @@ app = Flask(__name__)
 # IMPORTANTE: chamado APÓS app = Flask(...) e ANTES das rotas serem
 # definidas pela auto-instrumentação ter efeito.
 # ============================================================================
-from telemetry import init_telemetry
 init_telemetry(flask_app=app, service_name="analytics-service")
-
 
 @app.route('/health')
 def health():
     return jsonify({"status": "ok"})
 
-
-
 def start_worker():
     """ Inicia o worker SQS em uma thread separada """
     worker_thread = threading.Thread(target=sqs_worker_loop, daemon=True)
     worker_thread.start()
-
 
 # Inicia o worker SQS em uma thread de background
 start_worker()
