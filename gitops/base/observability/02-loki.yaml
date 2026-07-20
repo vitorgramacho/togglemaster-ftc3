@@ -1,14 +1,8 @@
 # =============================================================================
-# ArgoCD Application: Loki (logs centralizados)
+# ArgoCD Application: Loki (logs centralizados - Versão Otimizada AWS Academy)
 # ---------------------------------------------------------------------------
-# Modo "monolithic" via chart oficial: 1 pod único (read+write+gateway) para
-# economizar recursos do AWS Academy. Em produção usaríamos "simple-scalable"
-# ou "distributed" com S3 como backend.
-#
-# Por que NÃO usar Promtail neste projeto:
-#   - O OpenTelemetry Collector (próximo Application) já coleta logs dos
-#     pods via filelogreceiver e envia para o Loki com o lokiexporter.
-#   - Isso mantém a stack OTel-first: 1 agent para métricas+traces+logs.
+# Modo "SingleBinary" (1 pod único read+write+gateway) com limites de memória
+# e retenção reduzidos para caber em clusters t3.medium.
 # =============================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -29,17 +23,15 @@ spec:
       releaseName: loki
       values: |
         # ---------- Modo de deploy ----------
-        # "SingleBinary" = 1 StatefulSet com tudo. Ideal para AWS Academy.
         deploymentMode: SingleBinary
 
         # ---------- Configuração principal do Loki ----------
         loki:
-          auth_enabled: false  # Cluster interno, sem multi-tenancy
+          auth_enabled: false
           commonConfig:
             replication_factor: 1
           storage:
             type: 'filesystem'
-            # Em produção, aqui seria s3: { bucketnames: ..., region: ... }
           schemaConfig:
             configs:
               - from: 2024-01-01
@@ -49,52 +41,41 @@ spec:
                 index:
                   prefix: loki_index_
                   period: 24h
-          # Limites generosos para uma demo
+          # Limites enxutos para consumir o mínimo de RAM
           limits_config:
-            retention_period: 72h
-            max_query_series: 5000
-            max_query_parallelism: 32
-            ingestion_rate_mb: 16
-            ingestion_burst_size_mb: 32
-            # CRÍTICO para ingestão via OTLP: os atributos de recurso do OTel
-            # (k8s.namespace.name, k8s.pod.name etc.) chegam ao Loki como
-            # "structured metadata". Sem isto habilitado, o push OTLP do
-            # OTel Collector é REJEITADO e os logs nunca aparecem no Grafana.
-            # (Default é true no Loki 3.x, mas explicitamos para não depender
-            # da versão do chart.)
+            retention_period: 12h
+            max_query_series: 1000
+            max_query_parallelism: 4
+            ingestion_rate_mb: 4
+            ingestion_burst_size_mb: 8
             allow_structured_metadata: true
-            # OTLP: mantém os labels de recurso promovidos a labels de índice
             volume_enabled: true
 
         # ---------- Componentes ----------
         singleBinary:
           replicas: 1
           resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits:   { cpu: 1000m, memory: 1Gi }
+            requests: { cpu: 50m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 384Mi }
           persistence:
             enabled: true
-            size: 10Gi
+            size: 3Gi
             storageClass: gp2
 
         # ---------- Gateway ----------
-        # O gateway é um nginx que dá um único endpoint (http://loki-gateway)
-        # para o Grafana e o OTel Collector se conectarem.
         gateway:
           enabled: true
           replicas: 1
           resources:
-            requests: { cpu: 50m, memory: 64Mi }
-            limits:   { cpu: 200m, memory: 128Mi }
+            requests: { cpu: 10m, memory: 16Mi }
+            limits:   { cpu: 100m, memory: 48Mi }
 
         # ---------- Desabilitar componentes não-usados em SingleBinary ----------
-        # Estes são para deployments "scalable" ou "distributed". Em "SingleBinary"
-        # eles ficam parados consumindo recursos -> desligamos explicitamente.
-        backend:    { replicas: 0 }
-        read:       { replicas: 0 }
-        write:      { replicas: 0 }
-        ingester:   { replicas: 0 }
-        querier:    { replicas: 0 }
+        backend:        { replicas: 0 }
+        read:           { replicas: 0 }
+        write:          { replicas: 0 }
+        ingester:       { replicas: 0 }
+        querier:        { replicas: 0 }
         queryFrontend:  { replicas: 0 }
         queryScheduler: { replicas: 0 }
         distributor:    { replicas: 0 }
@@ -105,22 +86,22 @@ spec:
 
         # ---------- Cache ----------
         chunksCache:
-          enabled: false  # Memcached pesa: desligado pra demo
+          enabled: false
         resultsCache:
           enabled: false
 
-        # ---------- Test pods (helm test) ----------
+        # ---------- Test pods e monitoramento ----------
         test:
           enabled: false
         lokiCanary:
           enabled: false
         monitoring:
-          dashboards: { enabled: false }   # Vamos usar nossos próprios
+          dashboards: { enabled: false }
           rules:      { enabled: false }
           serviceMonitor:
-            enabled: true  # Mas SIM, queremos métricas do Loki no Prometheus
+            enabled: true
             labels:
-              release: kps    # Match com o release do kube-prometheus-stack
+              release: kps
   destination:
     server: https://kubernetes.default.svc
     namespace: observability

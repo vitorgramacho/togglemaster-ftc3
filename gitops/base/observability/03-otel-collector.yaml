@@ -1,21 +1,11 @@
 # =============================================================================
-# ArgoCD Application: OpenTelemetry Collector
+# ArgoCD Application: OpenTelemetry Collector (Versão Otimizada AWS Academy)
 # ---------------------------------------------------------------------------
-# Esta é a PEÇA CENTRAL exigida pelo enunciado: o OTel Collector recebe os
-# 3 sinais (métricas, logs, traces) dos microsserviços e os roteia para:
-#
-#   - métricas  -> Prometheus (via OTLP remote-write ao receiver do Prometheus)
-#   - logs      -> Loki (via lokiexporter)
-#   - traces    -> Datadog (via datadog exporter) e mantém localmente para debug
-#
-# Modo: "daemonset" (1 pod por node).
-#   - filelogreceiver lê /var/log/pods de TODOS os pods do node -> Loki
-#   - hostmetrics gera métricas do node
-#   - otlp recebe dos microsserviços instrumentados (via Service ClusterIP)
-#
-# Por que daemon (e não deployment)?
-#   Logs vêm do disco do node. Um pod num node X NÃO consegue ler /var/log/pods
-#   do node Y. Portanto cada node precisa do seu próprio coletor.
+# Peça central do pipeline de observabilidade em modo DaemonSet.
+# Roteia:
+#   - Métricas -> Prometheus (remote write) + Datadog (app metrics)
+#   - Logs     -> Loki (via otlphttp no loki-gateway)
+#   - Traces   -> Datadog (via datadog exporter)
 # =============================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -37,19 +27,23 @@ spec:
       values: |
         # ---------- Modo de deploy ----------
         mode: daemonset
-        # Imagem "contrib" inclui filelogreceiver + lokiexporter + datadogexporter
         image:
           repository: otel/opentelemetry-collector-contrib
           tag: 0.110.0
 
-        # ---------- Recursos ----------
+        # ---------- Recursos (Ajustados para t3.medium) ----------
         resources:
-          requests: { cpu: 100m, memory: 256Mi }
-          limits:   { cpu: 500m, memory: 512Mi }
+          requests: { cpu: 50m, memory: 128Mi }
+          limits:   { cpu: 400m, memory: 384Mi }
+
+        # ---------- Injeção de variáveis de ambiente do Pod ----------
+        extraEnvs:
+          - name: K8S_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
 
         # ---------- ServiceAccount + RBAC ----------
-        # O filelogreceiver precisa ler /var/log/pods (montado abaixo) e o
-        # k8sattributes precisa listar Pods/Namespaces para enriquecer logs.
         serviceAccount:
           create: true
         clusterRole:
@@ -62,7 +56,7 @@ spec:
               resources: ["replicasets"]
               verbs:     ["get", "list", "watch"]
 
-        # ---------- Volumes: precisamos do host /var/log/pods para ler logs ----------
+        # ---------- Volumes: leitura de logs do host ----------
         extraVolumes:
           - name: varlogpods
             hostPath: { path: /var/log/pods }
@@ -77,18 +71,15 @@ spec:
             readOnly: true
 
         # ---------- Secrets para o Datadog ----------
-        # A DD_API_KEY vem do Secret "datadog-secret" criado fora do Git.
-        # Veja: gitops/base/observability/datadog/README.md
         extraEnvsFrom:
           - secretRef:
               name: datadog-secret
-              optional: true   # se não houver Datadog, o coletor ainda sobe
+              optional: true
 
-        # ---------- Configuração do pipeline (o coração do OTel) ----------
+        # ---------- Configuração do pipeline ----------
         config:
           # ===== RECEIVERS =====
           receivers:
-            # OTLP: recebe dos microsserviços instrumentados (gRPC e HTTP)
             otlp:
               protocols:
                 grpc:
@@ -97,24 +88,20 @@ spec:
                   endpoint: 0.0.0.0:4318
                   cors:
                     allowed_origins: ["http://*", "https://*"]
-            # FileLog: lê todos os logs de pods do node
             filelog:
               include:
                 - /var/log/pods/*/*/*.log
-              # Excluir os próprios pods de observability para não criar loop
               exclude:
                 - /var/log/pods/observability_*/*/*.log
               start_at: end
               include_file_path: true
               include_file_name: false
               operators:
-                # Extrai metadata do path: /var/log/pods/<ns>_<pod>_<uid>/<container>/<n>.log
                 - type: regex_parser
                   id: extract_metadata_from_filepath
                   regex: '^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[^\/]+)\/(?P<container_name>[^\/]+)\/.*$'
                   parse_from: attributes["log.file.path"]
                   cache: { size: 128 }
-                # Move atributos para resource (assim viram labels no Loki)
                 - type: move
                   from: attributes.namespace
                   to: resource["k8s.namespace.name"]
@@ -124,7 +111,6 @@ spec:
                 - type: move
                   from: attributes.container_name
                   to: resource["k8s.container.name"]
-            # HostMetrics: CPU/memória/disco/rede DOS NODES
             hostmetrics:
               collection_interval: 30s
               scrapers:
@@ -134,26 +120,21 @@ spec:
                 filesystem: {}
                 load: {}
                 network: {}
-            # K8s Cluster: métricas de pods/nodes via API
             k8s_cluster:
               auth_type: serviceAccount
               collection_interval: 30s
 
           # ===== PROCESSORS =====
           processors:
-            # Garante que NENHUM dado é perdido por backpressure (até 80% da RAM)
+            # Limites absolutos alinhados com a limit de 384MiB
             memory_limiter:
-              check_interval: 5s
-              limit_percentage: 80
-              spike_limit_percentage: 25
-            # Junta vários eventos antes de exportar -> menos overhead de rede
+              check_interval: 2s
+              limit_mib: 300
+              spike_limit_mib: 75
             batch:
               send_batch_size: 1024
               timeout: 10s
               send_batch_max_size: 2048
-            # k8sattributes: enriquece logs/métricas/traces com labels do Pod
-            # (ex: deployment, node, container, image). ESSENCIAL para correlacionar
-            # logs do Loki com traces do Datadog no Grafana.
             k8sattributes:
               auth_type: serviceAccount
               passthrough: false
@@ -178,7 +159,6 @@ spec:
                       name: k8s.pod.name
                 - sources:
                     - from: connection
-            # Resource processor: tags fixas em tudo
             resource:
               attributes:
                 - key: cluster.name
@@ -190,37 +170,28 @@ spec:
 
           # ===== EXPORTERS =====
           exporters:
-            # --- Loki: para onde vão os logs ---
-            # O loki-gateway (ver 02-loki.yaml) expõe /loki/api/v1/push
             otlphttp/loki:
               endpoint: http://loki-gateway.observability.svc.cluster.local/otlp
               tls:
                 insecure: true
 
-            # --- Prometheus: para onde vão as métricas ---
-            # Usa o remote-write receiver do Prometheus (habilitado em 01-)
             prometheusremotewrite:
               endpoint: http://kps-kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/write
               tls:
                 insecure: true
-              # Mantém os k8s attributes como labels do Prometheus
               resource_to_telemetry_conversion:
                 enabled: true
 
-            # --- Datadog: para onde vão os traces (e métricas duplicadas) ---
-            # APM exige host + chave + site (us5, datadoghq.eu, etc.)
             datadog:
               api:
-                key: ${env:DD_API_KEY}     # vem do Secret datadog-secret
-                site: ${env:DD_SITE}        # ex: us5.datadoghq.com
+                key: ${env:DD_API_KEY}
+                site: ${env:DD_SITE}
               hostname: ${env:K8S_NODE_NAME}
               host_metadata:
                 enabled: true
               traces:
-                # Filtra spans de health-check pra não poluir o APM
                 ignore_resources: ["GET /health", "GET /metrics"]
 
-            # --- Debug (fica desligado em prod, útil em dev) ---
             debug:
               verbosity: basic
 
@@ -231,50 +202,33 @@ spec:
             zpages:
               endpoint: 0.0.0.0:55679
 
-          # ===== SERVICE: monta os pipelines =====
+          # ===== SERVICE =====
           service:
             extensions: [health_check, zpages]
             telemetry:
               logs:
                 level: info
-                # Métricas internas do COLETOR vão para o Prometheus (meta-monitoring)
               metrics:
                 address: 0.0.0.0:8888
             pipelines:
-              # ----- TRACES -----
-              # microsserviços -> OTLP -> [batch, k8sattributes, resource] -> Datadog
               traces:
                 receivers:  [otlp]
                 processors: [memory_limiter, k8sattributes, resource, batch]
                 exporters:  [datadog, debug]
-              # ----- METRICS (infra) -----
-              # IMPORTANTE: as métricas de APLICAÇÃO (http_requests_total etc.)
-              # chegam ao Prometheus via SCRAPE DIRETO no :9464 de cada pod
-              # (job kubernetes-pods em 01-). Por isso este pipeline NÃO inclui
-              # o receiver `otlp` no caminho do Prometheus — senão a mesma série
-              # chegaria 2x (scrape + remote-write) e o PromQL contaria em dobro.
-              # Aqui ficam só as métricas que SÓ o Collector tem.
               metrics:
                 receivers:  [hostmetrics, k8s_cluster]
                 processors: [memory_limiter, k8sattributes, resource, batch]
                 exporters:  [prometheusremotewrite, datadog]
-              # ----- METRICS (aplicação -> Datadog) -----
-              # As métricas OTLP das apps NÃO vão para o Prometheus (evita
-              # duplicação), mas SEGUEM para o Datadog para enriquecer o APM.
               metrics/app:
                 receivers:  [otlp]
                 processors: [memory_limiter, k8sattributes, resource, batch]
                 exporters:  [datadog]
-              # ----- LOGS -----
-              # filelog -> Loki (+ Datadog se DD_API_KEY estiver setada)
               logs:
                 receivers:  [otlp, filelog]
                 processors: [memory_limiter, k8sattributes, resource, batch]
                 exporters:  [otlphttp/loki, datadog]
 
         # ---------- Ports/Service ----------
-        # Os Services criados aqui permitem que os microsserviços enviem OTLP
-        # via "http://otel-opentelemetry-collector.observability:4317"
         ports:
           otlp:
             enabled: true
