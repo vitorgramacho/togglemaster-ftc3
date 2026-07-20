@@ -59,8 +59,8 @@ resource "helm_release" "argocd" {
       # Para o AWS Academy, deixamos os componentes "leves":
       controller = {
         resources = {
-          requests = { cpu = "100m", memory = "256Mi" }
-          limits   = { cpu = "500m", memory = "512Mi" }
+          requests = { cpu = "250m", memory = "512Mi" }
+          limits   = { cpu = "1000m", memory = "1024Mi" } # Aumentado de 512Mi para 1024Mi
         }
       }
       repoServer = {
