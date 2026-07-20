@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
 # Self-Healing Webhook — ToggleMaster Fase 4
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Recebe webhooks do Alertmanager E do PagerDuty (configurável) e executa
 # uma ação corretiva: `kubectl rollout restart deployment/<service>`.
 #
