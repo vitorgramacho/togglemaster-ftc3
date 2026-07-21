@@ -31,9 +31,9 @@ variable "instance_types" {
 }
 
 variable "desired_size" {
-  description = "Quantidade desejada de nodes."
+  description = "Quantidade desejada de nodes. Padrão 3: a stack completa da Fase 4 (sistema + ArgoCD + observability + 5 microsserviços) não cabe confortavelmente em 2 nós t3.medium (17 pods/nó = 34 vagas), causando pods em 'Pending' (Too many pods)."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "min_size" {

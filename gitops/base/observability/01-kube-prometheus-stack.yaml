@@ -45,15 +45,18 @@ spec:
             serviceMonitorSelectorNilUsesHelmValues: false
             podMonitorSelectorNilUsesHelmValues: false
 
-            # Persistência: usa gp2
-            storageSpec:
-              volumeClaimTemplate:
-                spec:
-                  storageClassName: gp2
-                  accessModes: ["ReadWriteOnce"]
-                  resources:
-                    requests:
-                      storage: 5Gi
+            # CORREÇÃO: sem storageSpec, o Prometheus usa emptyDir (efêmero).
+            # storageSpec com gp2 exigiria o EBS CSI driver + LabRole com
+            # permissão de criar volumes EBS — no AWS Academy o PVC fica
+            # "Pending" e o pod prometheus-...-0 nunca sobe. Para a demo da
+            # Fase 4, emptyDir basta (retention já é curta). Em conta própria
+            # com EBS funcionando, reative:
+            #   storageSpec:
+            #     volumeClaimTemplate:
+            #       spec:
+            #         storageClassName: gp2
+            #         accessModes: ["ReadWriteOnce"]
+            #         resources: { requests: { storage: 5Gi } }
 
             # Recebe métricas via OTLP do OTel Collector
             enableRemoteWriteReceiver: true

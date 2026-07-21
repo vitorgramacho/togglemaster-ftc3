@@ -57,10 +57,14 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits:   { cpu: 500m, memory: 384Mi }
+          # CORREÇÃO: persistence via PVC (gp2) exige o EBS CSI driver + a
+          # LabRole com permissão de criar volumes EBS. No AWS Academy isso
+          # falha (o PVC fica "Pending" e o loki-0 nunca sobe). Com
+          # enabled:false o SingleBinary usa um emptyDir (efêmero) — os logs
+          # não sobrevivem a um restart do pod, o que é aceitável para a demo
+          # da Fase 4 e elimina a dependência de disco EBS.
           persistence:
-            enabled: true
-            size: 3Gi
-            storageClass: gp2
+            enabled: false
 
         # ---------- Gateway ----------
         gateway:
