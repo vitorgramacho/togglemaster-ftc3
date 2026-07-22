@@ -32,6 +32,11 @@ spec:
             - "project:togglemaster"
             - "phase:4"
 
+          # ---------- Cluster Checks ----------
+          # Desativa a verificação de cluster_checks já que não há configs a despachar
+          clusterChecks:
+            enabled: false
+
           # ---------- APM ----------
           apm:
             portEnabled: true
@@ -60,12 +65,23 @@ spec:
             enabled: true        # mostra deployments/HPAs no Datadog
           kubeStateMetricsEnabled: false   # já vem do kube-prometheus-stack
 
+        # ---------- Cluster Check Runner ----------
+        clusterChecksRunner:
+          enabled: false
+
         # ---------- Cluster Agent ----------
         clusterAgent:
           enabled: true
           replicas: 1
           metricsProvider:
             enabled: false     # HPA continua usando o metrics-server padrão
+          # Probes ajustadas para evitar falhas durante o startup em nós pequenos
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 15
           resources:
             requests: { cpu: 20m, memory: 128Mi }
             limits:   { cpu: 250m, memory: 256Mi }
