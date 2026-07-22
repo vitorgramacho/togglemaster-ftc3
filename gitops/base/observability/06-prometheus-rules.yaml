@@ -58,14 +58,14 @@ spec:
         - alert: HighHttpErrorRate
           expr: |
             (
-              sum by (service) (
+              sum by (service, namespace) (
                 rate(http_requests_total{
                   http_response_status_code=~"5..",
                   service=~"auth-service|evaluation-service|flag-service|targeting-service|analytics-service"
                 }[5m])
               )
               /
-              sum by (service) (
+              sum by (service, namespace) (
                 rate(http_requests_total{
                   service=~"auth-service|evaluation-service|flag-service|targeting-service|analytics-service"
                 }[5m])
