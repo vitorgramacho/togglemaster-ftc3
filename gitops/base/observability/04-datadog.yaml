@@ -45,8 +45,8 @@ spec:
 
           # ---------- Process Agent ----------
           processAgent:
-            enabled: true
-            processCollection: true
+            enabled: false
+            processCollection: false
 
           # ---------- System Probe (Garante que eBPF/NPM fiquem desligados) ----------
           systemProbe:

@@ -69,6 +69,26 @@ resource "helm_release" "argocd" {
           limits   = { cpu = "300m", memory = "256Mi" }
         }
       }
+      # Componentes OPCIONAIS do ArgoCD desligados para economizar 2 pods
+      # (importante no cluster t3.medium com 2 nós). Nenhum é exigido pela
+      # Fase 4 nem usado no projeto:
+      #  - dex: proxy de SSO (Google/GitHub/LDAP). Não usamos — o login é pelo
+      #    usuário 'admin' local, que NÃO passa pelo dex.
+      #  - notifications: avisa eventos do ArgoCD em Slack/email. Não configurado.
+      #    A "notificação ChatOps" exigida pela Fase 4 vai por outro caminho
+      #    (Alertmanager -> PagerDuty -> Discord), sem relação com isto.
+      dex = {
+        enabled = false
+      }
+      notifications = {
+        enabled = false
+      }
+      # applicationset-controller desligado: o projeto cria as Applications
+      # individualmente via kubectl_manifest no Terraform (não usa
+      # ApplicationSets para gerar apps dinamicamente). -1 pod.
+      applicationSet = {
+        enabled = false
+      }
     })
   ]
 

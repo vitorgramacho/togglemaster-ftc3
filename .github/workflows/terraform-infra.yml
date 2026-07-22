@@ -267,7 +267,13 @@ jobs:
         run: |
           if [ -f tfplan ]; then
             echo "Aplicando plan salvo do job anterior..."
-            terraform apply -auto-approve tfplan
+            # Se o plan salvo estiver "stale" (state mudou entre plan e apply,
+            # ex.: recurso alterado à mão na AWS), refaz um plan fresco e aplica
+            # em vez de quebrar o pipeline.
+            if ! terraform apply -auto-approve tfplan; then
+              echo "::warning::Plan salvo obsoleto (stale). Refazendo plan sobre o state atual e aplicando..."
+              terraform apply -auto-approve
+            fi
           else
             echo "Apply direto (workflow_dispatch)..."
             terraform apply -auto-approve

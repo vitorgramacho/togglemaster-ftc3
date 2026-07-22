@@ -68,11 +68,7 @@ spec:
 
         # ---------- Gateway ----------
         gateway:
-          enabled: true
-          replicas: 1
-          resources:
-            requests: { cpu: 10m, memory: 16Mi }
-            limits:   { cpu: 100m, memory: 48Mi }
+          enabled: false   # -1 pod: no SingleBinary consumidores falam direto com o service loki:3100
 
         # ---------- Desabilitar componentes não-usados em SingleBinary ----------
         backend:        { replicas: 0 }
