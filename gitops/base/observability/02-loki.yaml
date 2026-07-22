@@ -50,6 +50,14 @@ spec:
             ingestion_burst_size_mb: 8
             allow_structured_metadata: true
             volume_enabled: true
+          # O módulo ruler-storage tenta inicializar por padrão e escrever em
+          # disco. Apontamos explicitamente para um caminho DENTRO do emptyDir
+          # gravável (/var/loki), evitando o "read-only file system" no /var/loki/rules.
+          rulerConfig:
+            storage:
+              type: local
+              local:
+                directory: /var/loki/rules
 
         # ---------- Componentes ----------
         singleBinary:
@@ -57,14 +65,24 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits:   { cpu: 500m, memory: 384Mi }
-          # CORREÇÃO: persistence via PVC (gp2) exige o EBS CSI driver + a
-          # LabRole com permissão de criar volumes EBS. No AWS Academy isso
-          # falha (o PVC fica "Pending" e o loki-0 nunca sobe). Com
-          # enabled:false o SingleBinary usa um emptyDir (efêmero) — os logs
-          # não sobrevivem a um restart do pod, o que é aceitável para a demo
-          # da Fase 4 e elimina a dependência de disco EBS.
+          # persistence via PVC (gp2) exige o EBS CSI driver + a LabRole com
+          # permissão de criar volumes EBS. No AWS Academy isso falha (o PVC
+          # fica "Pending"). Por isso desligamos a persistence...
           persistence:
             enabled: false
+          # ...MAS o Loki PRECISA de um diretório gravável em /var/loki. Com o
+          # rootfs read-only e sem PVC, ele crashava com:
+          #   "mkdir /var/loki: read-only file system / error initialising
+          #    module: ruler-storage"
+          # A solução é montar um emptyDir (efêmero, na memória/disco do nó)
+          # explicitamente em /var/loki. Os dados não sobrevivem a um restart
+          # do pod — aceitável para a demo da Fase 4.
+          extraVolumes:
+            - name: loki-data
+              emptyDir: {}
+          extraVolumeMounts:
+            - name: loki-data
+              mountPath: /var/loki
 
         # ---------- Gateway ----------
         gateway:
