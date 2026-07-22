@@ -59,14 +59,14 @@ spec:
           expr: |
             (
               sum by (service, namespace) (
-                rate(http_requests_total{
+                rate(http_requests_ratio_total{
                   http_response_status_code=~"5..",
                   service=~"auth-service|evaluation-service|flag-service|targeting-service|analytics-service"
                 }[5m])
               )
               /
               sum by (service, namespace) (
-                rate(http_requests_total{
+                rate(http_requests_ratio_totall{
                   service=~"auth-service|evaluation-service|flag-service|targeting-service|analytics-service"
                 }[5m])
               )
