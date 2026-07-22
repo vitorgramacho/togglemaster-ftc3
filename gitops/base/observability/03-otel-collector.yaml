@@ -27,6 +27,8 @@ spec:
       values: |
         # ---------- Modo de deploy ----------
         mode: daemonset
+        service:
+          enabled: true
         image:
           repository: otel/opentelemetry-collector-contrib
           tag: 0.110.0
