@@ -1,6 +1,6 @@
 # =============================================================================
 # ArgoCD Application: Datadog Agent (Versão Otimizada AWS Academy)
-# ----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Redução severa nos requests de memória do DaemonSet e Cluster Agent para
 # evitar sufocar nós t3.medium. Preserva K8s Live, Process Map e APM via OTLP.
 # =============================================================================
