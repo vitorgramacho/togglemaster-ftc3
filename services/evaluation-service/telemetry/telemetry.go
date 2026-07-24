@@ -171,7 +171,11 @@ func WrapHandler(handler http.Handler, serverName string) http.Handler {
 	requestsTotal, _ := meter.Int64Counter(
 		"http_requests",
 		metricapi.WithDescription("Total de requisições HTTP processadas"),
-		metricapi.WithUnit("1"),
+		// SEM WithUnit: o exportador Prometheus do Go mapeia a unidade "1"
+		// (dimensionless) para o sufixo "_ratio", gerando
+		// "http_requests_ratio_total" em vez de "http_requests_total".
+		// Isso deixava auth/evaluation fora dos alertas e do dashboard, que
+		// consultam http_requests_total (nome emitido pelos serviços Python).
 	)
 	// Histogram em segundos, com buckets explícitos adequados a uma API web
 	requestDuration, _ := meter.Float64Histogram(
