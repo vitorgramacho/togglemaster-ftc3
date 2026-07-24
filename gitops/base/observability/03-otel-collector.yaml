@@ -27,8 +27,6 @@ spec:
       values: |
         # ---------- Modo de deploy ----------
         mode: daemonset
-        service:
-          enabled: true
         image:
           repository: otel/opentelemetry-collector-contrib
           tag: 0.110.0
@@ -50,13 +48,59 @@ spec:
           create: true
         clusterRole:
           create: true
+          # ATENÇÃO: são necessários DOIS conjuntos de permissões:
+          #
+          # 1) processor k8sattributes -> enriquece telemetria com metadados
+          #    (precisa de pods, namespaces, replicasets, nodes)
+          #
+          # 2) receiver k8s_cluster -> coleta métricas de nível de CLUSTER
+          #    (precisa listar praticamente todos os workloads). Sem estas
+          #    regras o collector entra em LOOP de erros
+          #    "... is forbidden: User system:serviceaccount:observability:
+          #     otel-opentelemetry-collector cannot list resource ..."
+          #    e nenhuma métrica de cluster é coletada.
           rules:
             - apiGroups: [""]
-              resources: ["pods", "namespaces"]
-              verbs:     ["get", "watch", "list"]
+              resources:
+                - "pods"
+                - "pods/status"
+                - "namespaces"
+                - "namespaces/status"
+                - "nodes"
+                - "nodes/spec"
+                - "nodes/stats"
+                - "nodes/proxy"
+                - "services"
+                - "endpoints"
+                - "events"
+                - "replicationcontrollers"
+                - "replicationcontrollers/status"
+                - "resourcequotas"
+                - "persistentvolumes"
+                - "persistentvolumeclaims"
+              verbs: ["get", "list", "watch"]
             - apiGroups: ["apps"]
-              resources: ["replicasets"]
-              verbs:     ["get", "list", "watch"]
+              resources:
+                - "replicasets"
+                - "deployments"
+                - "daemonsets"
+                - "statefulsets"
+              verbs: ["get", "list", "watch"]
+            - apiGroups: ["batch"]
+              resources:
+                - "jobs"
+                - "cronjobs"
+              verbs: ["get", "list", "watch"]
+            - apiGroups: ["autoscaling"]
+              resources:
+                - "horizontalpodautoscalers"
+              verbs: ["get", "list", "watch"]
+            - apiGroups: ["extensions"]
+              resources:
+                - "daemonsets"
+                - "deployments"
+                - "replicasets"
+              verbs: ["get", "list", "watch"]
 
         # ---------- Volumes: leitura de logs do host ----------
         extraVolumes:
