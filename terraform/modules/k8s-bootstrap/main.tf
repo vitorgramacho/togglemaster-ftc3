@@ -105,6 +105,23 @@ resource "kubernetes_secret" "evaluation_extra" {
   type = "Opaque"
 }
 
+resource "kubernetes_secret" "aws_credentials" {
+  for_each = kubernetes_namespace.app
+
+  metadata {
+    name      = "aws-credentials"
+    namespace = each.value.metadata[0].name
+  }
+
+  data = {
+    AWS_ACCESS_KEY_ID     = var.aws_access_key_id
+    AWS_SECRET_ACCESS_KEY = var.aws_secret_access_key
+    AWS_SESSION_TOKEN     = var.aws_session_token
+  }
+
+  type = "Opaque"
+}
+
 # Cópia do SERVICE_API_KEY no namespace do auth-service.
 # Necessário para o Job `auth-seed-apikey` (que roda em auth-namespace)
 # poder ler o valor sem cruzar namespaces — secretKeyRef não permite
