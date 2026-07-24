@@ -34,7 +34,13 @@ on:
     branches: [main]
     paths:
       - "services/**"
-      - "gitops/base/**"
+      # NOTA: 'gitops/base/**' foi REMOVIDO deste gatilho de propósito.
+      # O job update-gitops commita a nova tag de imagem em
+      # gitops/base/<svc>/deployment.yaml usando o GITOPS_TOKEN (um PAT).
+      # Commits feitos com PAT DISPARAM workflows (ao contrário do
+      # GITHUB_TOKEN), então manter 'gitops/base/**' aqui criava um LAÇO:
+      # build -> commit no manifesto -> novo build -> novo commit...
+      # Mudanças em manifestos são responsabilidade do ArgoCD, não do CI.
       - ".github/workflows/cicd-services.yml"
       - ".github/workflows/_reusable-cicd.yml"
   workflow_dispatch:
