@@ -314,7 +314,7 @@ jobs:
             exit 0
           fi
           git add "${{ inputs.gitops_path }}"
-          git commit -m "chore(gitops): bump ${{ inputs.service }} image to ${{ needs.docker.outputs.image_tag }}"
+          git commit -m "chore(gitops): bump ${{ inputs.service }} image to ${{ needs.docker.outputs.image_tag }} [skip ci]"
 
           # Estratégia anti-conflito com retry:
           # Quando vários serviços terminam em paralelo e todos tentam fazer
