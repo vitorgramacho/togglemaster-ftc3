@@ -56,12 +56,14 @@ variable "aws_region" {
 variable "aws_access_key_id" {
   type        = string
   description = "AWS Access Key ID"
+  default     = ""
   sensitive   = true
 }
 
 variable "aws_secret_access_key" {
   type        = string
   description = "AWS Secret Access Key"
+  default     = ""
   sensitive   = true
 }
 

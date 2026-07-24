@@ -48,6 +48,9 @@ spec:
               name: http
             - containerPort: 9464
               name: metrics
+          envFrom:
+            - secretRef:
+                name: aws-credentials
           env:
             - name: PORT
               value: "8001"

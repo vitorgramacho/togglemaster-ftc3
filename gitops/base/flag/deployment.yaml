@@ -33,6 +33,9 @@ spec:
           ports:
             - { containerPort: 8002, name: http }
             - { containerPort: 9464, name: metrics }
+          envFrom:
+            - secretRef:
+                name: aws-credentials
           env:
             - name: PORT
               value: "8002"
