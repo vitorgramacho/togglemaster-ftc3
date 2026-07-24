@@ -135,11 +135,12 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           cat > terraform.tfvars <<EOF
-          aws_region      = "${{ env.AWS_REGION }}"
-          gitops_repo_url = "${{ github.server_url }}/${{ github.repository }}.git"
+          aws_region            = "${{ env.AWS_REGION }}"
+          gitops_repo_url       = "${{ github.server_url }}/${{ github.repository }}.git"
+          aws_access_key_id     = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws_secret_access_key = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          aws_session_token     = "${{ secrets.AWS_SESSION_TOKEN }}"
           EOF
-          echo "tfvars gerado:"
-          cat terraform.tfvars
 
       - name: Terraform plan
         id: plan
