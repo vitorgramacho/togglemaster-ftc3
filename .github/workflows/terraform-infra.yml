@@ -64,9 +64,6 @@ env:
   AWS_REGION: us-east-1
   TF_VERSION: "1.10.0"     
   WORKING_DIR: ./terraform
-  TF_VAR_aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  TF_VAR_aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  TF_VAR_aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
@@ -75,6 +72,10 @@ jobs:
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
+    env:
+      TF_VAR_aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      TF_VAR_aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
     if: github.event_name != 'workflow_dispatch' || inputs.action != 'destroy'
     outputs:
       has_changes: ${{ steps.plan.outputs.has_changes }}
@@ -211,6 +212,10 @@ jobs:
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
+    env:
+      TF_VAR_aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      TF_VAR_aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
     needs: terraform-plan
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.action == 'apply') ||
