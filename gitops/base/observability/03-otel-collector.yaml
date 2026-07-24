@@ -275,6 +275,20 @@ spec:
                 exporters:  [otlphttp/loki, datadog]
 
         # ---------- Ports/Service ----------
+        # CORREÇÃO CRÍTICA: no modo `daemonset` o chart do OpenTelemetry
+        # Collector NÃO cria um Service por padrão (ver open-telemetry/
+        # opentelemetry-helm-charts#524). Sem ele, o nome DNS
+        # "otel-opentelemetry-collector.observability.svc.cluster.local"
+        # não existe, e TODAS as aplicações falham ao enviar telemetria com
+        # "[Errno 111] Connection refused" — nenhum trace/métrica chega ao
+        # Collector (e, por consequência, nada chega ao Datadog/Loki/Prometheus).
+        # Habilitar aqui cria o Service com o nome <release>-opentelemetry-collector
+        # = "otel-opentelemetry-collector", exatamente o endpoint que os 5
+        # microsserviços já usam na env OTEL_EXPORTER_OTLP_ENDPOINT.
+        service:
+          enabled: true
+          type: ClusterIP
+
         ports:
           otlp:
             enabled: true
