@@ -91,7 +91,20 @@ def init_telemetry(flask_app=None, service_name: str | None = None) -> None:
 
         # /metrics na porta 9464 (default do PrometheusMetricReader)
         prom_reader = PrometheusMetricReader()
-        start_http_server(port=9464, addr="0.0.0.0")
+        # CORREÇÃO: com gunicorn --workers > 1, cada worker importa este módulo
+        # e tenta abrir a MESMA porta 9464. O segundo worker recebia
+        # "OSError: [Errno 98] Address already in use", a exceção subia até o
+        # try/except externo e ABORTAVA toda a inicialização — inclusive o
+        # FlaskInstrumentor (linhas abaixo), deixando aquele worker SEM TRACES.
+        # Agora a falha é isolada: o /metrics do primeiro worker já atende, e o
+        # tracing continua sendo configurado normalmente em todos os workers.
+        try:
+            start_http_server(port=9464, addr="0.0.0.0")
+        except OSError as e:
+            log.warning(
+                "porta 9464 indisponível (outro worker do gunicorn já a expõe); "
+                "seguindo sem /metrics neste worker: %s", e
+            )
 
         # OTLP para o coletor a cada 30s
         otlp_reader = PeriodicExportingMetricReader(
