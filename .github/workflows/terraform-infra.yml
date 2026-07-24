@@ -249,8 +249,11 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           cat > terraform.tfvars <<EOF
-          aws_region      = "${{ env.AWS_REGION }}"
-          gitops_repo_url = "${{ github.server_url }}/${{ github.repository }}.git"
+          aws_region            = "${{ env.AWS_REGION }}"
+          gitops_repo_url       = "${{ github.server_url }}/${{ github.repository }}.git"
+          aws_access_key_id     = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws_secret_access_key = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          aws_session_token     = "${{ secrets.AWS_SESSION_TOKEN }}"
           EOF
 
       # Em workflow_dispatch=apply gera plan na hora; em push reaproveita do job anterior.
