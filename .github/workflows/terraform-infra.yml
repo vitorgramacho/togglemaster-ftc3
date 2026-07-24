@@ -518,6 +518,10 @@ jobs:
   terraform-destroy:
     name: Terraform Destroy
     runs-on: ubuntu-latest
+    env:
+      TF_VAR_aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      TF_VAR_aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
     environment:
       name: production-destroy
@@ -574,8 +578,11 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           cat > terraform.tfvars <<EOF
-          aws_region      = "${{ env.AWS_REGION }}"
-          gitops_repo_url = "${{ github.server_url }}/${{ github.repository }}.git"
+          aws_region            = "${{ env.AWS_REGION }}"
+          gitops_repo_url       = "${{ github.server_url }}/${{ github.repository }}.git"
+          aws_access_key_id     = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws_secret_access_key = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          aws_session_token     = "${{ secrets.AWS_SESSION_TOKEN }}"
           EOF
 
       - name: Terraform destroy
