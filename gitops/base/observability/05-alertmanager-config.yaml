@@ -97,6 +97,9 @@ stringData:
               namespace: '{{ .GroupLabels.namespace }}'
               service:   '{{ .GroupLabels.service }}'
               summary:   '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        webhook_configs:
+          - url: 'https://discord.com/api/webhooks/1520903961790644234/XAph3scgBBgXMDF6o1YJgzDuNoWMih39hSz93dHErCQhUHLw8S8HyrJNaO6smMSPQaLe/slack'
+            send_resolved: true
 
       - name: 'pagerduty-critical'
         pagerduty_configs:
