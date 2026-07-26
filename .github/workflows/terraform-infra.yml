@@ -391,6 +391,15 @@ jobs:
           # Default do site caso o GitHub Secret DD_SITE não esteja definido
           SITE="${DD_SITE:-us5.datadoghq.com}"
 
+          # NORMALIZAÇÃO (crítica): o exporter do Datadog monta as URLs como
+          # "https://trace.agent.${SITE}" e "https://api.${SITE}". Se o valor
+          # vier com protocolo (ex.: "https://us5.datadoghq.com"), gera uma URL
+          # quebrada tipo "https://trace.agent.https//us5.datadoghq.com", que
+          # falha com "no such host" e faz o Collector DESCARTAR todos os
+          # traces/métricas. Removemos esquema (http/https) e barras finais.
+          SITE="$(echo "$SITE" | sed -E 's#^[a-zA-Z]+://##; s#/+$##')"
+          echo "DD_SITE normalizado: ${SITE}"
+
           # "create --dry-run | apply" = idempotente (cria ou atualiza)
           kubectl -n observability create secret generic datadog-secret \
             --from-literal=api-key="${DD_API_KEY}" \
