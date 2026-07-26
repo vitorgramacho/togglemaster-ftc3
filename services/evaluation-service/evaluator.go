@@ -1,260 +1,235 @@
-// Package telemetry — inicialização do OpenTelemetry para serviços Go
-// ===================================================================
-//
-// Este pacote provê uma função `Init` que:
-//   1. Configura um TracerProvider apontando para o OTel Collector via OTLP/HTTP
-//   2. Configura um MeterProvider que envia métricas via OTLP E expõe
-//      /metrics em :9464 (formato Prometheus) — backup para o caso do
-//      OTel Collector cair.
-//   3. Retorna um http.Handler que é um WRAPPER do mux original adicionando
-//      spans automáticos a cada request (otelhttp middleware).
-//
-// Por que separar do main.go?
-//   - O auth-service e o evaluation-service compartilham EXATAMENTE a mesma
-//     lógica de bootstrap. Em vez de copiar 80 linhas no main.go de cada
-//     um, isolamos aqui. Cada serviço importa "./telemetry" do seu próprio
-//     contexto de build.
-//
-// Variáveis de ambiente respeitadas:
-//   OTEL_SERVICE_NAME            — nome do serviço (ex: auth-service)
-//   OTEL_EXPORTER_OTLP_ENDPOINT  — endpoint do coletor (default OTLP http)
-//   DISABLE_OTEL=true            — desliga TODA a instrumentação (debug local)
-package telemetry
+package main
 
 import (
-	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"strconv"
+	"regexp"
+	"sync"
 	"time"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/exporters/prometheus"
-	metricapi "go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
-// Shutdown é a função retornada por Init para flush final dos buffers.
-// Chame-a em defer no main(). Sem isso, spans em buffer NÃO chegam ao
-// coletor quando o processo termina (kill, SIGTERM no rolling update).
-type Shutdown func(context.Context) error
+const (
 
-// noopShutdown é o que retornamos quando OTel está desligado.
-func noopShutdown(context.Context) error { return nil }
+	CACHE_TTL = 30 * time.Second
+)
 
-// Init prepara o OTel para um serviço Go.
-//
-// Retornos:
-//   - shutdown: função de cleanup
-//   - error:    se a inicialização falhar (não fatal — ver chamadas no main)
-func Init(ctx context.Context, serviceName string) (Shutdown, error) {
-	if os.Getenv("DISABLE_OTEL") == "true" {
-		log.Println("OpenTelemetry desabilitado via DISABLE_OTEL=true")
-		return noopShutdown, nil
+
+var validFlagNameRe = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,128}$`)
+
+
+func validateFlagName(name string) error {
+	if !validFlagNameRe.MatchString(name) {
+		return fmt.Errorf("flag_name inválido: apenas letras, números, hífens e underscores são permitidos")
 	}
+	return nil
+}
 
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "otel-opentelemetry-collector.observability.svc.cluster.local:4318"
-	}
-	// As libs OTel esperam "host:port" SEM esquema. Tiramos se vier por engano.
-	endpoint = stripScheme(endpoint)
 
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(serviceName),
-			semconv.ServiceVersion(envOr("SERVICE_VERSION", "1.0.0")),
-			semconv.DeploymentEnvironment(envOr("DEPLOYMENT_ENV", "production")),
-			semconv.ServiceNamespace("togglemaster"),
-		),
-		resource.WithFromEnv(),
-		resource.WithProcess(),
-		resource.WithHost(),
-	)
+func buildServiceURL(base, pathSuffix, resourceName string) (string, error) {
+	parsed, err := url.Parse(base)
 	if err != nil {
-		return noopShutdown, err
+		return "", fmt.Errorf("URL base inválida (%q): %w", base, err)
 	}
+	parsed.Path = parsed.Path + pathSuffix + url.PathEscape(resourceName)
+	return parsed.String(), nil
+}
 
-	// -------- Traces --------
-	traceExp, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint(endpoint),
-		otlptracehttp.WithInsecure(), // dentro do cluster, mTLS não é necessário
-	)
+
+func (a *App) getDecision(userID, flagName string) (bool, error) {
+	if err := validateFlagName(flagName); err != nil {
+		return false, err
+	}
+	info, err := a.getCombinedFlagInfo(flagName)
 	if err != nil {
-		return noopShutdown, err
+		return false, err
 	}
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithResource(res),
-		sdktrace.WithBatcher(traceExp,
-			sdktrace.WithBatchTimeout(5*time.Second),
-			sdktrace.WithMaxExportBatchSize(512),
-		),
-	)
-	otel.SetTracerProvider(tracerProvider)
+	return a.runEvaluationLogic(info, userID), nil
+}
 
-	// Propagator: W3C TraceContext (padrão de mercado) + Baggage
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
 
-	// -------- Metrics --------
-	// 2 leitores:
-	//  a) OTLP -> Collector -> Prometheus/Datadog
-	//  b) /metrics local (Prometheus scrape direto, fallback)
-	metricExp, err := otlpmetrichttp.New(ctx,
-		otlpmetrichttp.WithEndpoint(endpoint),
-		otlpmetrichttp.WithInsecure(),
-	)
+func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
+	cacheKey := fmt.Sprintf("flag_info:%s", flagName)
+
+	val, err := a.RedisClient.Get(ctx, cacheKey).Result()
+	if err == nil {
+		var info CombinedFlagInfo
+		if uerr := json.Unmarshal([]byte(val), &info); uerr == nil {
+			log.Printf("Cache HIT para flag '%s'", flagName)
+			return &info, nil
+		}
+		log.Printf("Erro ao desserializar cache para flag '%s': %v", flagName, err)
+	}
+
+	log.Printf("Cache MISS para flag '%s'", flagName)
+
+	// 2. Cache MISS - Buscar dos serviços
+	info, err := a.fetchFromServices(flagName)
 	if err != nil {
-		return noopShutdown, err
+		return nil, err
 	}
-	promReader, err := prometheus.New()
-	if err != nil {
-		return noopShutdown, err
-	}
-	meterProvider := metric.NewMeterProvider(
-		metric.WithResource(res),
-		metric.WithReader(promReader),
-		metric.WithReader(metric.NewPeriodicReader(metricExp,
-			metric.WithInterval(30*time.Second),
-		)),
-	)
-	otel.SetMeterProvider(meterProvider)
 
-	// Sobe o /metrics em :9464 numa goroutine (parecido com o prometheus-client)
+	// 3. Salvar no Cache (best effort)
+	if jsonData, mErr := json.Marshal(info); mErr == nil {
+		if sErr := a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err(); sErr != nil {
+			log.Printf("Falha ao salvar no cache (não-fatal): %v", sErr)
+		}
+	}
+
+	return info, nil
+}
+
+func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var flagInfo *Flag
+	var ruleInfo *TargetingRule
+	var flagErr, ruleErr error
+
 	go func() {
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttpHandler())
-		s := &http.Server{
-			Addr:              ":9464",
-			Handler:           mux,
-			ReadHeaderTimeout: 5 * time.Second,
-		}
-		log.Println("Prometheus /metrics escutando em :9464")
-		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Erro no servidor de métricas: %v", err)
-		}
+		defer wg.Done()
+		flagInfo, flagErr = a.fetchFlag(flagName)
 	}()
 
-	log.Printf("OpenTelemetry inicializado para %q (endpoint=%s)", serviceName, endpoint)
+	go func() {
+		defer wg.Done()
+		ruleInfo, ruleErr = a.fetchRule(flagName)
+	}()
 
-	shutdown := func(ctx context.Context) error {
-		// Importante: chamar AMBOS para fazer flush final
-		_ = tracerProvider.Shutdown(ctx)
-		_ = meterProvider.Shutdown(ctx)
-		return nil
+	wg.Wait()
+
+	if flagErr != nil {
+		return nil, flagErr
 	}
-	return shutdown, nil
-}
-
-// WrapHandler embrulha um http.Handler com:
-//  1) o middleware otelhttp (gera spans para o tracing distribuído / Service Map)
-//  2) um middleware de MÉTRICAS CUSTOMIZADAS com nomes DETERMINÍSTICOS
-//     (http_requests_total e http_request_duration_seconds), idênticos aos
-//     emitidos pelos serviços Python. Sem isso, o otelhttp emitiria
-//     `http.server.request.duration` cuja tradução para Prometheus é
-//     imprevisível entre versões, e os alertas/dashboard ficariam vazios.
-func WrapHandler(handler http.Handler, serverName string) http.Handler {
-	meter := otel.GetMeterProvider().Meter("togglemaster.http")
-
-	// Counter: Prometheus adiciona o sufixo `_total` -> http_requests_total
-	requestsTotal, _ := meter.Int64Counter(
-		"http_requests",
-		metricapi.WithDescription("Total de requisições HTTP processadas"),
-		// SEM WithUnit: o exportador Prometheus do Go mapeia a unidade "1"
-		// (dimensionless) para o sufixo "_ratio", gerando
-		// "http_requests_ratio_total" em vez de "http_requests_total".
-		// Isso deixava auth/evaluation fora dos alertas e do dashboard, que
-		// consultam http_requests_total (nome emitido pelos serviços Python).
-	)
-	// Histogram em segundos, com buckets explícitos adequados a uma API web
-	requestDuration, _ := meter.Float64Histogram(
-		"http_request_duration_seconds",
-		metricapi.WithDescription("Duração das requisições HTTP em segundos"),
-		metricapi.WithUnit("s"),
-		metricapi.WithExplicitBucketBoundaries(
-			0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5,
-			0.75, 1.0, 2.0, 5.0, 10.0,
-		),
-	)
-
-	serviceName := envOr("OTEL_SERVICE_NAME", serverName)
-
-	metricsMiddleware := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-			// Captura o status code via ResponseWriter wrapper
-			rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-			next.ServeHTTP(rw, r)
-			elapsed := time.Since(start).Seconds()
-
-			attrs := metricapi.WithAttributes(
-				attribute.String("service", serviceName),
-				attribute.String("http_request_method", r.Method),
-				attribute.String("http_route", r.URL.Path),
-			)
-			statusAttrs := metricapi.WithAttributes(
-				attribute.String("service", serviceName),
-				attribute.String("http_request_method", r.Method),
-				attribute.String("http_route", r.URL.Path),
-				attribute.String("http_response_status_code", strconv.Itoa(rw.status)),
-			)
-			requestsTotal.Add(r.Context(), 1, statusAttrs)
-			requestDuration.Record(r.Context(), elapsed, attrs)
-		})
+	if ruleErr != nil {
+		log.Printf("Aviso: regra de segmentação não encontrada para '%s' (%v). Usando padrão.",
+			flagName, ruleErr)
 	}
 
-	// Ordem: otelhttp por fora (cria o span raiz), métricas por dentro.
-	return otelhttp.NewHandler(metricsMiddleware(handler), serverName)
+	return &CombinedFlagInfo{
+		Flag: flagInfo,
+		Rule: ruleInfo,
+	}, nil
 }
 
-// statusRecorder captura o status code escrito pelo handler, para podermos
-// rotular a métrica http_requests_total com http_response_status_code.
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
 
-func (r *statusRecorder) WriteHeader(code int) {
-	r.status = code
-	r.ResponseWriter.WriteHeader(code)
-}
-
-// WrapTransport embrulha o http.RoundTripper para que chamadas HTTP DE SAÍDA
-// propaguem o trace context (header `traceparent` do W3C) para o próximo
-// serviço. É a metade "client" do tracing distribuído — sem isso, cada
-// serviço cria seu próprio trace isolado e o Service Map fica desconexo.
-func WrapTransport(base http.RoundTripper) http.RoundTripper {
-	if base == nil {
-		base = http.DefaultTransport
+func (a *App) fetchFlag(flagName string) (*Flag, error) {
+	safeURL, err := buildServiceURL(a.FlagServiceURL, "/flags/", flagName)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao construir URL do flag-service: %w", err)
 	}
-	return otelhttp.NewTransport(base)
-}
 
-// --- helpers ---
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao montar requisição: %w", err)
 	}
-	return fallback
+
+	apiKey := os.Getenv("SERVICE_API_KEY")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := a.HttpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao chamar flag-service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &NotFoundError{flagName}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("flag-service retornou status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler resposta do flag-service: %w", err)
+	}
+
+	var flag Flag
+	if err := json.Unmarshal(body, &flag); err != nil {
+		return nil, fmt.Errorf("erro ao desserializar resposta do flag-service: %w", err)
+	}
+	return &flag, nil
 }
 
-func stripScheme(s string) string {
-	for _, p := range []string{"http://", "https://"} {
-		if len(s) > len(p) && s[:len(p)] == p {
-			return s[len(p):]
+
+func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
+	safeURL, err := buildServiceURL(a.TargetingServiceURL, "/rules/", flagName)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao construir URL do targeting-service: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao montar requisição: %w", err)
+	}
+
+	apiKey := os.Getenv("SERVICE_API_KEY")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := a.HttpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao chamar targeting-service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &NotFoundError{flagName}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("targeting-service retornou status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler resposta do targeting-service: %w", err)
+	}
+
+	var rule TargetingRule
+	if err := json.Unmarshal(body, &rule); err != nil {
+		return nil, fmt.Errorf("erro ao desserializar resposta do targeting-service: %w", err)
+	}
+	return &rule, nil
+}
+
+// runEvaluationLogic é onde a decisão é tomada
+func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
+	if info.Flag == nil || !info.Flag.IsEnabled {
+		return false
+	}
+
+	if info.Rule == nil || !info.Rule.IsEnabled {
+		return true
+	}
+
+	rule := info.Rule.Rules
+	if rule.Type == "PERCENTAGE" {
+		percentage, ok := rule.Value.(float64)
+		if !ok {
+			log.Printf("Erro: valor da regra de porcentagem não é número para '%s'", info.Flag.Name)
+			return false
+		}
+
+		userBucket := getDeterministicBucket(userID + info.Flag.Name)
+
+		if float64(userBucket) < percentage {
+			return true
 		}
 	}
-	return s
+
+	return false
+}
+
+// Usa SHA-256 — distribuição uniforme sem uso criptográfico.
+func getDeterministicBucket(input string) int {
+	hash := sha256.Sum256([]byte(input))
+	val := binary.BigEndian.Uint32(hash[:4])
+	return int(val % 100)
 }
