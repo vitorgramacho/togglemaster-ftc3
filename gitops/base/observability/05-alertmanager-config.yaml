@@ -89,7 +89,7 @@ stringData:
       # Fallback caso algum alerta escape do match
       - name: 'pagerduty-default'
         pagerduty_configs:
-          - service_key: '191ec3112875440cd03355e098c77e68'
+          - service_key: 'cb415cbf80304e09c0bd402da7b00fdf'
             severity: 'info'
             description: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} ({{ .GroupLabels.namespace }})'
             details:
@@ -100,7 +100,7 @@ stringData:
 
       - name: 'pagerduty-critical'
         pagerduty_configs:
-          - service_key: '191ec3112875440cd03355e098c77e68'
+          - service_key: 'cb415cbf80304e09c0bd402da7b00fdf'
             severity: 'critical'
             client: 'Alertmanager (ToggleMaster)'
             client_url: 'https://prometheus.togglemaster.local'
@@ -118,7 +118,7 @@ stringData:
 
       - name: 'pagerduty-warning'
         pagerduty_configs:
-          - service_key: '191ec3112875440cd03355e098c77e68'
+          - service_key: 'cb415cbf80304e09c0bd402da7b00fdf'
             severity: 'warning'
             description: '⚠️ [WARNING] {{ .GroupLabels.alertname }} — {{ .GroupLabels.service }}'
 
