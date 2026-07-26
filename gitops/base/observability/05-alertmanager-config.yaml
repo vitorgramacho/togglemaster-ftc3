@@ -74,9 +74,9 @@ stringData:
             - severity = "warning"
           receiver: 'pagerduty-warning'
 
-      # ---------- Inibição ----------
-      # Se um alerta crítico para um namespace está disparando, não inunde
-      # com warnings do mesmo namespace.
+    # ---------- Inibição ----------
+    # Se um alerta crítico para um namespace está disparando, não inunde
+    # com warnings do mesmo namespace.
     inhibit_rules:
       - source_matchers:
           - severity = "critical"
@@ -99,36 +99,47 @@ stringData:
               summary:   '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
         slack_configs:
           - api_url: 'https://discord.com/api/webhooks/1520903961790644234/XAph3scgBBgXMDF6o1YJgzDuNoWMih39hSz93dHErCQhUHLw8S8HyrJNaO6smMSPQaLe/slack'
-            channel: '#geral' # pode colocar qualquer nome de canal aqui
+            channel: '#geral'
             send_resolved: true
             title: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
             text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
 
-      - name: pagerduty-critical
+      - name: 'pagerduty-critical'
         pagerduty_configs:
-        - service_key: cb415cbf80304e09c0bd402da7b00fdf
-          client: Alertmanager (ToggleMaster)
-          client_url: https://prometheus.togglemaster.local
-          description: "🔥 [CRITICAL] {{ .GroupLabels.alertname }} — {{ .GroupLabels.service }}"
-          details:
-            alertname: '{{ .GroupLabels.alertname }}'
-            description: '{{ range .Alerts }}{{ .Annotations.description }}{{ "\n" }}{{ end }}'
-            namespace: '{{ .GroupLabels.namespace }}'
-            num_firing: '{{ .Alerts.Firing | len }}'
-            runbook: '{{ range .Alerts }}{{ .Annotations.runbook_url }}{{ end }}'
-            service: '{{ .GroupLabels.service }}'
-            summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ end }}'
-          severity: critical
-        # ⬇️ ADICIONE ISSO AQUI DENTRO DO RECEIVER CRÍTICO ⬇️
+          - service_key: 'cb415cbf80304e09c0bd402da7b00fdf'
+            client: 'Alertmanager (ToggleMaster)'
+            client_url: 'https://prometheus.togglemaster.local'
+            description: '🔥 [CRITICAL] {{ .GroupLabels.alertname }} — {{ .GroupLabels.service }}'
+            details:
+              alertname: '{{ .GroupLabels.alertname }}'
+              description: '{{ range .Alerts }}{{ .Annotations.description }}{{ "\n" }}{{ end }}'
+              namespace: '{{ .GroupLabels.namespace }}'
+              num_firing: '{{ .Alerts.Firing | len }}'
+              runbook: '{{ range .Alerts }}{{ .Annotations.runbook_url }}{{ end }}'
+              service: '{{ .GroupLabels.service }}'
+              summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ end }}'
+            severity: 'critical'
         slack_configs:
-        - api_url: https://discord.com/api/webhooks/1520903961790644234/XAph3scgBBgXMDF6o1YJgzDuNoWMih39hSz93dHErCQhUHLw8S8HyrJNaO6smMSPQaLe/slack
-          channel: '#geral'
-          send_resolved: true
-          title: '🔥 [CRITICAL] {{ .GroupLabels.alertname }}'
-          text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
+          - api_url: 'https://discord.com/api/webhooks/1520903961790644234/XAph3scgBBgXMDF6o1YJgzDuNoWMih39hSz93dHErCQhUHLw8S8HyrJNaO6smMSPQaLe/slack'
+            channel: '#geral'
+            send_resolved: true
+            title: '🔥 [CRITICAL] {{ .GroupLabels.alertname }}'
+            text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
+
+      # ADICIONADO: Receiver exigido pela rota 'pagerduty-warning'
+      - name: 'pagerduty-warning'
+        pagerduty_configs:
+          - service_key: 'cb415cbf80304e09c0bd402da7b00fdf'
+            severity: 'warning'
+            description: '⚠️ [WARNING] {{ .GroupLabels.alertname }} — {{ .GroupLabels.service }}'
+        slack_configs:
+          - api_url: 'https://discord.com/api/webhooks/1520903961790644234/XAph3scgBBgXMDF6o1YJgzDuNoWMih39hSz93dHErCQhUHLw8S8HyrJNaO6smMSPQaLe/slack'
+            channel: '#geral'
+            send_resolved: true
+            title: '⚠️ [WARNING] {{ .GroupLabels.alertname }}'
+            text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
 
       # ---------- Self-Healing Webhook ----------
-      # Aponta para o pod self-healing-webhook (ver gitops/base/self-healing/)
       - name: 'self-healing-webhook'
         webhook_configs:
           - url: 'http://self-healing-webhook.observability.svc.cluster.local:8080/heal'
