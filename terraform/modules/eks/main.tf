@@ -1,16 +1,4 @@
-# =============================================================================
-# Módulo: EKS
-# Cria o cluster Kubernetes gerenciado e o Node Group.
-#
-# IMPORTANTE — AWS Academy:
-# Este projeto NÃO cria roles IAM. Usamos a LabRole existente, conforme
-# exigência da Opção A do enunciado. A role é importada via data source no
-# módulo raiz e injetada aqui como variável "labrole_arn".
-# =============================================================================
 
-# -----------------------------------------------------------------------------
-# Security Group do Cluster (control plane <-> nodes)
-# -----------------------------------------------------------------------------
 resource "aws_security_group" "cluster" {
   name        = "${var.cluster_name}-cluster-sg"
   description = "Security group do EKS control plane."
@@ -43,11 +31,6 @@ resource "aws_eks_cluster" "this" {
     security_group_ids      = [aws_security_group.cluster.id]
   }
 
-  # Logs do control plane DESABILITADOS para AWS Academy.
-  # A LabRole de alguns labs não tem permissão para criar CloudWatch Log Groups,
-  # o que faria a criação do cluster falhar inteiramente.
-  # Em conta pessoal, descomente a linha abaixo:
-  # enabled_cluster_log_types = ["api", "audit", "authenticator"]
 
   tags = var.tags
 }
