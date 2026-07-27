@@ -1,19 +1,4 @@
-# =============================================================================
-# Módulo: k8s-bootstrap
-# Cria, no cluster recém-provisionado:
-#  - 1 namespace por microsserviço
-#  - 1 Secret central com as DATABASE_URLs (uma por banco) + REDIS_URL
-#  - 1 ConfigMap central com URLs entre serviços, fila SQS e tabela DynamoDB
-#  - metrics-server (necessário para o HPA)
-#
-# Esses Secrets/ConfigMaps são CONSUMIDOS pelos manifests do GitOps via
-# `secretKeyRef` / `configMapKeyRef`. Isso resolve dois requisitos do desafio
-# de uma vez:
-#  1) "As credenciais do banco de dados estão sendo passadas em arquivos de
-#     texto sem segurança" -> agora vêm de um Secret K8s gerado pelo Terraform
-#     a partir do random_password (sem credencial no Git).
-#  2) "Se não está no código, não existe" -> tudo é declarado em Terraform.
-# =============================================================================
+
 
 # -----------------------------------------------------------------------------
 # Namespaces (1 por microsserviço)
@@ -29,10 +14,7 @@ resource "kubernetes_namespace" "app" {
   }
 }
 
-# -----------------------------------------------------------------------------
-# Secret de banco em CADA namespace que precisa de DB
-# (auth, flag, targeting). Conteúdo: DATABASE_URL pronta.
-# -----------------------------------------------------------------------------
+
 resource "kubernetes_secret" "db_url" {
   for_each = toset(var.db_names) # ["auth", "flag", "targeting"]
 
@@ -56,13 +38,7 @@ resource "kubernetes_secret" "db_url" {
   type = "Opaque"
 }
 
-# -----------------------------------------------------------------------------
-# ConfigMap por namespace com configurações compartilhadas:
-#  - Redis URL (para evaluation/analytics)
-#  - URLs internas entre serviços (cluster.local)
-#  - Fila SQS
-#  - Tabela DynamoDB
-# -----------------------------------------------------------------------------
+
 resource "kubernetes_config_map" "shared" {
   for_each = toset(var.services)
 
@@ -83,10 +59,7 @@ resource "kubernetes_config_map" "shared" {
   }
 }
 
-# -----------------------------------------------------------------------------
-# Secret para o SERVICE_API_KEY do evaluation-service.
-# Gerado uma vez aqui e disponibilizado para o pod via envFrom.
-# -----------------------------------------------------------------------------
+
 resource "random_password" "service_api_key" {
   length  = 48
   special = false
@@ -177,18 +150,7 @@ resource "helm_release" "metrics_server" {
   }
 }
 
-# -----------------------------------------------------------------------------
-# ingress-nginx — controller Kubernetes necessário para que os manifests
-# de Ingress com `ingressClassName: nginx` sejam processados.
-# Sem este controller, o objeto Ingress existe no cluster mas nenhum
-# roteamento é configurado (o tráfego não chega aos pods).
-#
-# Tipo NodePort: compatível com AWS Academy (não exige criar um NLB/CLB).
-# O ALB do Terraform encaminha tráfego para os Nodes do EKS na porta
-# exposta pelo NodePort (configurada no Target Group via health check).
-# Em conta pessoal, `controller.service.type = LoadBalancer` provisiona
-# um NLB automaticamente.
-# -----------------------------------------------------------------------------
+
 resource "kubernetes_namespace" "ingress_nginx" {
   metadata {
     name = "ingress-nginx"
