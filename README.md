@@ -6,18 +6,9 @@ Sistema de feature flags com **5 microsserviços** rodando em **AWS EKS**, provi
 
 ---
 
-## Onde olhar primeiro
 
-| Documento | Para quem | Leitura |
-|---|---|---|
-| **[docs/fase4/CHANGES.md](docs/fase4/CHANGES.md)** | Banca avaliadora — entender O QUE e POR QUÊ mudou | 10 min |
-| **[docs/fase4/ARCHITECTURE.md](docs/fase4/ARCHITECTURE.md)** | Pessoa técnica — entender COMO o pipeline de telemetria funciona | 15 min |
-| **[docs/fase4/DEPLOYMENT.md](docs/fase4/DEPLOYMENT.md)** | Para subir/derrubar o ambiente no AWS Academy | 20 min |
-| **[docs/fase4/RELATORIO.pdf](docs/fase4/RELATORIO.pdf)** | Entrega oficial da Fase 4 | — |
 
----
-
-## Arquitetura — visão de 30 segundos
+## Arquitetura — 
 
 ```
 Microsserviços (5)  --> OTel Collector (DaemonSet) -+-> Datadog APM (traces)
