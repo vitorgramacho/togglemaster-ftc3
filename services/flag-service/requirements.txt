@@ -5,10 +5,7 @@ gunicorn==22.0.0
 python-dotenv==1.0.1
 requests==2.32.3
 
-# ============================================================
-# OpenTelemetry — instrumentação Fase 4 (Tech Challenge PosTech)
-# ============================================================
-# SDK core
+
 opentelemetry-api==1.27.0
 opentelemetry-sdk==1.27.0
 
@@ -25,7 +22,5 @@ opentelemetry-instrumentation-requests==0.48b0
 opentelemetry-instrumentation-psycopg2==0.48b0
 opentelemetry-instrumentation-logging==0.48b0
 
-# CRÍTICO: opentelemetry-instrumentation importa pkg_resources, que foi
-# REMOVIDO do setuptools >= 81. Sem este pin, a instrumentação Flask quebra
-# em runtime no python:3.11-slim com "No module named 'pkg_resources'".
+
 setuptools<81
