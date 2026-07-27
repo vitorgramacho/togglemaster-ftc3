@@ -1,22 +1,4 @@
-# =============================================================================
-# Grafana Dashboard: ToggleMaster — visão de saúde do ecossistema
-# ---------------------------------------------------------------------------
-# Requisito da Fase 4:
-#   "Crie, no mínimo, 1 Dashboard customizado no Grafana que centralize a
-#    saúde do ecossistema: uso de recursos do cluster, taxa de requisições
-#    dos microsserviços e painel de logs em tempo real."
-#
-# Este dashboard cobre TODOS os 3 itens em uma única tela:
-#   - linha 1: estado dos 5 serviços (up/down) + replicas
-#   - linha 2: taxa de requisições (RPS) por serviço e p95 de latência
-#   - linha 3: erros (4xx e 5xx) lado a lado
-#   - linha 4: uso de CPU e memória do cluster (todos os nodes)
-#   - linha 5: painel de LOGS em tempo real do Loki (filtrável por serviço)
-#
-# Como o Grafana sabe que isso aqui é um dashboard?
-#   O sidecar do Grafana (habilitado em 01-) procura ConfigMaps com a label
-#   "grafana_dashboard=1" e injeta o JSON neles como dashboard provisionado.
-# =============================================================================
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
