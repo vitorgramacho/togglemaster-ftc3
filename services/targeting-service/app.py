@@ -20,8 +20,8 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# =============================================================================
-# OpenTelemetry — Fase 4 (Tech Challenge PosTech)
+# ===========================================================================
+# OpenTelemetry — Fase 4 (Tech Challenge PosTech))
 # ============================================================================
 
 init_telemetry(flask_app=app, service_name="targeting-service")
