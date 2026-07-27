@@ -1,10 +1,4 @@
-# =============================================================================
-# Módulo: ElastiCache (Redis)
-# Cluster Redis simples (1 nó) — suficiente para o evaluation-service usar
-# como cache de avaliação de flags. NÃO habilitamos transit_encryption
-# (TLS) propositalmente para manter compatibilidade com o cliente Go
-# atual do evaluation-service, que abre conexão simples (redis://).
-# =============================================================================
+
 
 resource "aws_security_group" "redis" {
   name        = "${var.project}-redis-sg"
