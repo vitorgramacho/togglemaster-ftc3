@@ -13,7 +13,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 
-	// Fase 4 — instrumentação OpenTelemetry.
+	// Fase 4 — instrumentação OpenTelemetry
 	"auth-service/telemetry"
 )
 
