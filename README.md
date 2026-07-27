@@ -87,7 +87,6 @@ sed "s/PAGERDUTY_INTEGRATION_KEY/$PD_KEY/g" \
 kubectl -n argocd port-forward svc/argocd-server 8080:443
 ```
 
-Detalhe completo: **[docs/fase4/DEPLOYMENT.md](docs/fase4/DEPLOYMENT.md)**
 
 ---
 
