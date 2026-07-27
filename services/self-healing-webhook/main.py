@@ -1,26 +1,3 @@
-#!/usr/bin/env python3
-# =============================================================================
-# Self-Healing Webhook — ToggleMaster Fase 4
-# -------------------------------------------------------------------------------
-# Recebe webhooks do Alertmanager E do PagerDuty (configurável) e executa
-# uma ação corretiva: `kubectl rollout restart deployment/<service>`.
-#
-# Decisão de design: USAR a API K8s NATIVA (kubernetes client) ao invés de
-# shellar `kubectl`. Razão:
-#   1) Não precisamos enfiar kubectl + permissões dentro da imagem.
-#   2) A biblioteca já lida com retry, paginação e auth in-cluster.
-#   3) Token do ServiceAccount montado em /var/run/secrets/k8s/ -> RBAC do K8s.
-#
-# Auditoria: TUDO que o webhook faz é logado em formato JSON (1 linha por
-# evento) para ser pego pelo Loki. Isso serve como prova de execução
-# automática (requisito da Fase 4: "Mostre o log/execução da automação").
-#
-# Segurança em runtime:
-#   - Aceita apenas alertas com label "auto_heal: true" (whitelist por design)
-#   - Só restarta deployments dos namespaces *-namespace (regex hardcoded)
-#   - Rate-limit: máximo 1 restart por deployment a cada 5 minutos
-#     (evita "self-DDoS" se o alerta ficar oscilando)
-# ==============================================================================
 
 import json
 import logging
@@ -72,11 +49,7 @@ ALLOWED_NS_REGEX = re.compile(
 RATE_LIMIT_SECONDS = int(os.getenv("RATE_LIMIT_SECONDS", "300"))
 LISTEN_PORT = int(os.getenv("LISTEN_PORT", "8080"))
 
-# -----------------------------------------------------------------------------
-# Estado em memória do rate-limiter
-# Persistência? Não. Se o pod restartar, o limit "esquece" — é aceitável:
-# o objetivo do rate-limit é EVITAR flapping em segundos, não enforcar SLA.
-# -----------------------------------------------------------------------------
+
 _recent_actions: dict[str, float] = {}
 _lock = Lock()
 
@@ -89,18 +62,7 @@ def _within_rate_limit(deployment_key: str) -> bool:
         _recent_actions[deployment_key] = time.time()
         return False
 
-# -----------------------------------------------------------------------------
-# K8s client — inicialização LAZY e resiliente
-# -----------------------------------------------------------------------------
-# ATENÇÃO (correção de bug): antes, a config do K8s era carregada no import do
-# módulo. Se o token do ServiceAccount ainda não estivesse montado, ou se
-# nenhuma config fosse encontrada, o processo MORRIA no arranque -> o pod ia
-# para CrashLoopBackOff e o ArgoCD marcava a Application como "Degraded".
-#
-# Agora o cliente é criado SOB DEMANDA (na primeira chamada que precisa dele) e
-# qualquer falha é tratada como erro da operação, NUNCA derruba o processo.
-# Assim o servidor HTTP e o endpoint /health sempem sempre -> a readiness/liveness
-# probe passa -> o ArgoCD vê o pod como Healthy.
+
 _apps_v1 = None
 _k8s_init_error: str | None = None
 
