@@ -1,9 +1,4 @@
-# =============================================================================
-# ArgoCD Application: kube-prometheus-stack (Versão Otimizada para AWS Academy)
-# ---------------------------------------------------------------------------
-# Ajustado para t3.medium: intervalos de scrape relaxados, retenção curta
-# e requests de memória enxutos sem perder nenhuma regra ou integração.
-# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
