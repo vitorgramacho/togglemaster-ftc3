@@ -10,8 +10,7 @@ Documento que descreve **o que foi alterado e adicionado** no projeto entre a Fa
 2. [Arquitetura nova](#2-arquitetura-nova)
 3. [O que foi adicionado](#3-o-que-foi-adicionado)
 4. [O que foi alterado](#4-o-que-foi-alterado)
-5. [Decisões de design e por quê](#5-decisões-de-design-e-por-quê)
-6. [Mapeamento requisito → entregável](#6-mapeamento-requisito--entregável)
+5. [Mapeamento requisito → entregável](#5-mapeamento-requisito--entregável)
 
 ---
 
@@ -201,96 +200,7 @@ Cada um dos 5 Dockerfiles agora expõe **9464** além da porta da API. Os coment
 
 ---
 
-## 5. Decisões de design e por quê
-
-### Por que OTel Collector como peça central (e não enviar direto para o Datadog)?
-
-Porque o enunciado **exige** o OTel Collector como peça central. Mas é também a decisão tecnicamente certa: se amanhã decidirmos trocar Datadog por New Relic, basta mexer no exporter do Collector — **nenhum código de aplicação muda**. 
-### Por que DaemonSet (e não Deployment) para o Collector?
-
-O `filelogreceiver` lê `/var/log/pods` do disco do node. Um pod no node A não consegue ler o `/var/log/pods` do node B. Portanto, cada node precisa do seu próprio coletor → DaemonSet.
-
-
-### Por que notificar o Discord **via PagerDuty** e não direto do Alertmanager?
-
-Centralização do trail de auditoria. Se Discord viesse direto do Alertmanager E indiretamente do PagerDuty, teríamos duplicidade. Com tudo passando pelo PagerDuty: 1 incidente, 1 timer de MTTA/MTTR, e o Discord vira apenas um "consumer" do incidente — sem inflar métricas.
-
-### Por que self-healing como pod in-cluster (e não AWS Lambda)?
-
-1. **Latência**: pod em-cluster responde em ms; Lambda fora da VPC precisa de NAT.
-2. **Auth K8s**: dentro do cluster usamos ServiceAccount + RBAC nativo. Fora, precisaria gerar e rotacionar um kubeconfig com token de longa duração.
-3. **Custo no AWS Academy**: Lambda fora do free-tier conta. Pod no node existente é zero adicional.
-4. **Debug**: log do pod aparece no Loki — exatamente onde o resto da prova está.
-
-### Por que rate-limit de 5 min no self-healing?
-
-Se o alerta fica oscilando entre `firing` e `resolved` a cada 30s (uma falha intermitente), sem rate-limit o webhook restartaria o deployment a cada 30s → **self-DDoS**. O limite de 5 min é o mesmo SLO que um humano teria ao olhar para a fila do PagerDuty ("ok, já restartei, vou esperar antes de tentar de novo").
-
-### Por que retention de 24h no Prometheus e 72h no Loki?
-
-Os nodes t3.medium do AWS Academy têm 4 GB de RAM e disco EBS limitado. Em produção real, Prometheus seria 15 dias com remote-write para Thanos/Mimir e Loki seria meses com S3. Aqui, retentions curtas são suficientes para **demonstração**.
-
-### Por que `kube-prometheus-stack` em vez dos charts separados?
-
-O `kube-prometheus-stack` traz os 5 itens já bem amarrados: Prometheus + Alertmanager + Grafana + Operator + ServiceMonitors + node-exporter + kube-state-metrics. Cada um separadamente exigiria 5 charts e ~200 linhas a mais de YAML.
-
-### Por que métricas HTTP CUSTOMIZADAS (e não só a auto-instrumentação)?
-
-A auto-instrumentação do OTel (Flask/otelhttp) emite a métrica `http.server.duration`. O problema: ao ser traduzida para o Prometheus, esse nome vira algo **imprevisível entre versões** — `http_server_duration_milliseconds`, `http_server_request_duration_seconds`, etc., dependendo da versão do SDK e da convenção semântica ativa. Alertas e dashboards que dependem de um nome fixo ficariam **vazios** sem aviso.
-
-A solução foi registrar, via middleware (`before_request`/`after_request` no Flask e um `statusRecorder` no Go), duas métricas com nomes **determinísticos**:
-
-- `http_requests_total` — counter com labels `service`, `http_request_method`, `http_route`, `http_response_status_code`
-- `http_request_duration_seconds` — histogram em **segundos** com buckets explícitos (`0.005 … 10.0`)
-
-Dois detalhes que validamos empiricamente (rodando o SDK real):
-
-1. **Sufixo `_total` automático**: o exporter Prometheus adiciona `_total` a counters. Por isso o counter é criado como `http_requests` (sem sufixo) e o Prometheus o expõe como `http_requests_total`. Criar já com `_total` resultaria em `http_requests_total_total`.
-2. **Buckets em segundos**: os buckets default do histogram OTel são pensados para milissegundos (`0, 5, …, 10000`). Sem uma `View`/`WithExplicitBucketBoundaries` em segundos, o `histogram_quantile` do alerta `HighLatency` (> 2s) daria resultados sem sentido.
-
-Esses nomes são EXATAMENTE os usados em `06-prometheus-rules.yaml` e `07-grafana-dashboard.yaml`.
-
-### Por que pinar `setuptools<81` nos serviços Python?
-
-`opentelemetry-instrumentation` (0.48b0) ainda importa `pkg_resources`, módulo que foi **removido do `setuptools >= 81`**. Em uma imagem `python:3.11-slim` (que não traz `setuptools` antigo), a instrumentação Flask quebraria em runtime com `ModuleNotFoundError: No module named 'pkg_resources'` — derrubando TODA a telemetria do serviço. O pin `setuptools<81` no `requirements.txt` garante que `pkg_resources` exista. Validado rodando o stack real de pacotes.
-
-### Por que criar os secrets de observabilidade no workflow (e não só manual)?
-
-A primeira versão exigia criar o `datadog-secret` e a config do Alertmanager à mão, via `kubectl`. Isso é seguro, mas é trabalho repetitivo a cada novo cluster. A versão atual permite definir três *GitHub Secrets* no repositório (`DD_API_KEY`, `DD_SITE`, `PAGERDUTY_INTEGRATION_KEY`); o job `post-apply-check` do `terraform-infra.yml` então cria os secrets no cluster automaticamente, logo após o ArgoCD subir e antes da stack de observability reconciliar.
-
-Detalhes da implementação que importam:
-
-- **`secrets.X` não funciona em `if:`** no GitHub Actions (avalia sempre como vazio). Por isso um step "gate" lê os secrets via `env` e publica flags em `outputs`; os steps seguintes condicionam por essas flags.
-- **Degrada com elegância:** se um secret não estiver definido, o workflow emite um *warning* e segue — não falha. O usuário pode criar aquele secret manualmente depois.
-- **Idempotente:** usa `kubectl create ... --dry-run=client -o yaml | kubectl apply -f -`, então rodar o workflow de novo atualiza os secrets em vez de falhar por já existirem.
-- **Empurra o ArgoCD:** após criar os secrets, anota as Applications de observability com `argocd.argoproj.io/refresh=hard` para reconciliar na hora (sem isso funcionaria mesmo assim via `selfHeal`, só mais devagar).
-
-A integração **PagerDuty → Discord permanece manual** de propósito: é configurada na UI do PagerDuty (uma Extension com a URL do webhook do Discord) e não há API de Kubernetes que a represente.
-
-### Como tratamos a CVE-2026-33186 (gRPC) que bloqueou o CI
-
-O scan de segurança do pipeline (Trivy, com `exit-code: 1` em CRITICAL) passou a **bloquear** o build do auth-service e do evaluation-service ao detectar a **CVE-2026-33186** (CVSS 9.1, authorization bypass) em `google.golang.org/grpc v1.66.1`. Essa versão de gRPC entra como **dependência transitiva** do SDK OpenTelemetry — mesmo usando só os exporters OTLP/HTTP, o pacote `otlptracehttp` importa gRPC internamente (ver open-telemetry/opentelemetry-go#2579).
-
-Análise de exploitabilidade: a CVE só afeta servidores gRPC que usam interceptors de autorização por path (`grpc/authz`). Nossos serviços **não iniciam servidor gRPC nem usam authz** — logo, não são exploráveis na prática. Mesmo assim, corrigimos de verdade, atualizando a dependência.
-
-**Solução:** forçar `google.golang.org/grpc v1.79.3` (versão corrigida) no `go.mod` dos dois serviços Go, com **duas diretivas combinadas**:
-
-```
-require google.golang.org/grpc v1.79.3
-replace google.golang.org/grpc => google.golang.org/grpc v1.79.3
-```
-
-Por que `replace` e não só `require`? Um `require` define apenas o piso mínimo, e nenhuma release do OTel SDK traz grpc ≥ v1.79.3 por padrão ainda (o OTel v1.38 usa grpc v1.75.1, também anterior à correção). O `replace` **força** a versão corrigida em todo o grafo de dependências — inclusive nas referências transitivas do OTel — garantindo que o binário final não embarque a versão vulnerável e que o Trivy não encontre a CVE.
-
-É seguro porque a aplicação não chama a API do gRPC diretamente; apenas os exporters HTTP do OTel a usam internamente (marshalling proto), e o gRPC mantém compatibilidade retroativa dentro da série v1.x. O `go mod tidy` executado no Dockerfile resolve automaticamente as dependências transitivas que o gRPC v1.79.3 exige (protobuf, x/net etc.).
-
-Não usamos `.trivyignore`: a vulnerabilidade foi **efetivamente removida** do binário, não apenas silenciada. A política "CRITICAL bloqueia o pipeline" continua valendo integralmente para qualquer vulnerabilidade real.
-
-
-
----
-
-## 6. Mapeamento requisito → entregável
+## 5. Mapeamento requisito → entregável
 
 | Requisito da Fase 4 | Onde está implementado |
 |---|---|
