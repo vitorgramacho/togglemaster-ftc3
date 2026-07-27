@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: analytics-service
-          image: 997820554840.dkr.ecr.us-east-1.amazonaws.com/togglemaster-analytics:v1.0.0-b0921ff
+          image: 997820554840.dkr.ecr.us-east-1.amazonaws.com/togglemaster-analytics:v1.0.0-5608fd2
           imagePullPolicy: Always
           ports:
             - { containerPort: 8005, name: http }
