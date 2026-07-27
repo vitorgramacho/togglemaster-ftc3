@@ -1,9 +1,4 @@
-# =============================================================================
-# ArgoCD Application: Loki (logs centralizados - Versão Otimizada AWS Academy)
-# ---------------------------------------------------------------------------
-# Modo "SingleBinary" (1 pod único read+write+gateway) com limites de memória
-# e retenção reduzidos para caber em clusters t3.medium.
-# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
