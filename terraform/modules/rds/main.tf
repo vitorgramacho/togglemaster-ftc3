@@ -1,21 +1,4 @@
-# =============================================================================
-# Módulo: RDS
-# Cria N instâncias PostgreSQL (3 por padrão: auth, flag, targeting)
-#
-# Decisão de design:
-# - Senhas são geradas com random_password (não há mais dependência de Infisical).
-# - Cada senha é guardada no AWS Secrets Manager (funciona no AWS Academy
-#   sem precisar criar IAM, pois a LabRole já tem permissão de leitura).
-# - A LabRole dos nodes EKS já consegue ler esses secrets, permitindo que
-#   manifests futuros consumam credenciais via External Secrets Operator
-#   se quiserem. Para o escopo deste TC, as credenciais também são
-#   injetadas como Kubernetes Secret pelo módulo k8s-bootstrap....
-# =============================================================================
 
-# -----------------------------------------------------------------------------
-# Security Group dos bancos — permite tráfego apenas de dentro da VPC
-# (suficiente para AWS Academy / PoC).
-# -----------------------------------------------------------------------------
 resource "aws_security_group" "rds" {
   name        = "${var.project}-rds-sg"
   description = "Permite acesso ao PostgreSQL apenas de dentro da VPC."
@@ -60,9 +43,7 @@ resource "random_password" "db" {
   for_each = toset(var.databases)
   length   = 20
   special  = true
-  # ATENÇÃO: a senha é embutida crua na connection string (postgres://user:SENHA@host/db).
-  # Caracteres como #, %, ?, =, @, +, {, } quebram URLs.
-  # Usamos apenas caracteres que são seguros em URLs sem encoding.
+
   override_special = "_-."
 }
 
@@ -101,11 +82,7 @@ resource "aws_db_instance" "this" {
   })
 }
 
-# -----------------------------------------------------------------------------
-# Secrets Manager — guarda cada credencial.
-# (No AWS Academy a LabRole já tem permissão pra criar/ler secrets;
-#  isto NÃO conta como criar IAM Role/Policy, é só CRUD em recurso.)
-# -----------------------------------------------------------------------------
+
 resource "aws_secretsmanager_secret" "db" {
   for_each                = toset(var.databases)
   name                    = "${var.project}/${each.key}/db-credentials"
