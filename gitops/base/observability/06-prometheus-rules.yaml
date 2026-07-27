@@ -1,44 +1,11 @@
-# =============================================================================
-# PrometheusRule: alertas customizados do ToggleMaster
-# ---------------------------------------------------------------------------
-# Os "must-have" da Fase 4:
-#
-#   1) HighHttpErrorRate -> taxa de 5xx > 5% em qualquer microsserviço
-#      Label: severity=critical, auto_heal=true
-#         => Vai pro PagerDuty (severity crítica)
-#         => Dispara o webhook self-healing (kubectl rollout restart)
-#
-#   2) ServiceDown      -> /health falhou em 2 scrapes seguidos
-#   3) HighLatency      -> p95 da resposta > 2s
-#   4) PodCrashLooping  -> pod re-startou > 3x em 10min
-#   5) HighMemoryUsage  -> uso > 90% da memory.limits
-#
-# Notas:
-#   - "auto_heal=true" só na regra que sabemos curar com restart. Por exemplo,
-#     "ServiceDown" pode ser BANCO de dados caído -> restart NÃO ajuda, e
-#     pioraria o cenário acordando ainda mais gente. Por isso só HighHttpErrorRate
-#     tem auto-heal.
-# =============================================================================
+
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: togglemaster-alerts
   namespace: observability
   annotations:
-    # ═════════════════════════════════════════════════════════════════════════
-    # CORREÇÃO CRÍTICA (ovo-e-galinha de CRD):
-    # O kind "PrometheusRule" é um CRD que SÓ EXISTE depois que o
-    # kube-prometheus-stack (Application filha 01-) for instalado. Na PRIMEIRA
-    # sincronização do app-of-apps, o dry-run deste recurso falharia com
-    # "kind desconhecido" e ABORTARIA O SYNC INTEIRO — nenhuma Application
-    # filha seria criada e a stack ficaria OutOfSync para sempre.
-    #
-    # SkipDryRunOnMissingResource: pula o dry-run quando o CRD ainda não
-    #   existe, permitindo que o resto do diretório sincronize normalmente.
-    # sync-wave "2": aplica este recurso por último, depois das Applications
-    #   filhas (wave 0/1), dando tempo do CRD ser instalado. O retry da
-    #   syncPolicy cuida de reaplicar até o CRD existir.
-    # ═════════════════════════════════════════════════════════════════════════
+
     argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
     argocd.argoproj.io/sync-wave: "2"
   labels:
@@ -53,8 +20,7 @@ spec:
     - name: togglemaster.app.errors
       interval: 30s
       rules:
-        # ---- O alerta MAIS importante (cenário descrito no enunciado) ----
-        # "o serviço de avaliação começou a falhar silenciosamente"
+
         - alert: HighHttpErrorRate
           expr: |
             (
@@ -99,8 +65,7 @@ spec:
           labels:
             severity: critical
             category: availability
-            # SEM auto_heal: pode ser problema de infra (RDS, ElastiCache).
-            # Restart é remédio errado.
+
           annotations:
             summary: '⛔ Serviço {{ $labels.service }} INDISPONÍVEL no namespace {{ $labels.namespace }}'
             description: 'O endpoint /health não respondeu por mais de 2 minutos. Verifique pod, DB e Redis.'
