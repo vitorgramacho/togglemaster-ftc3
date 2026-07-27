@@ -1,24 +1,4 @@
-# =============================================================================
-# ArgoCD "App-of-Apps": observability-stack
-# ---------------------------------------------------------------------------
-# Esta Application aponta para o diretório que contém TODAS as outras
-# Applications da stack de observabilidade (01- a 08-). É o ponto de entrada
-# único: criar/aplicar SÓ este YAML faz o ArgoCD descobrir e sincronizar
-# Prometheus, Loki, OTel, Datadog, Alertmanager config, dashboards, regras
-# e o self-healing.
-#
-# Como usar:
-#   kubectl apply -f gitops/base/observability/_app-of-apps.yaml
-#
-# Estrutura final no ArgoCD:
-#   observability-stack
-#     ├── kube-prometheus-stack
-#     ├── loki
-#     ├── opentelemetry-collector
-#     ├── datadog
-#     ├── (raw manifests: namespace, alertmanager-config, rules, dashboard)
-#     └── self-healing-webhook
-# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
