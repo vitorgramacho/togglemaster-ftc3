@@ -21,13 +21,7 @@ load_dotenv()
 app = Flask(__name__)
 subprocess.call('echo flag-service iniciado', shell=True)
 
-# ============================================================================
-# OpenTelemetry — Fase 4 (Tech Challenge PosTech)
-# ----------------------------------------------------------------------------
-# IMPORTANTE: o `init_telemetry` precisa rodar DEPOIS de `app = Flask(...)`
-# (auto-instrumenta o app) e ANTES de qualquer rota ser chamada. Aqui é o
-# local correto: logo após instanciar o Flask, antes dos @app.route.
-# ============================================================================
+
 init_telemetry(flask_app=app, service_name="flag-service")
 
 # --- Configuração ---
