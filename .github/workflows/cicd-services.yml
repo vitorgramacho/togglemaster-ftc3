@@ -1,24 +1,4 @@
-# =============================================================================
-# CI/CD — ToggleMaster Microsserviços (workflow CONSOLIDADO)
-#
-# Estrutura:
-#   1) detect-changes  → paths-filter identifica quais serviços mudaram
-#   2) ci-auth         → pipeline completo do auth-service (se mudou)
-#   3) ci-flag         → pipeline completo do flag-service (se mudou)
-#   4) ci-targeting    → pipeline completo do targeting-service (se mudou)
-#   5) ci-evaluation   → pipeline completo do evaluation-service (se mudou)
-#   6) ci-analytics    → pipeline completo do analytics-service (se mudou)
-#   7) ci-self-healing → pipeline do self-healing-webhook (Fase 4, se mudou)
-#   8) ci-summary      → agrega resultado dos 6; único check obrigatório
-#
-# Os 6 jobs do meio rodam EM PARALELO (todos dependem apenas de
-# detect-changes). Cada um chama o workflow reutilizável
-# `_reusable-cicd.yml` com parâmetros explícitos.
-#
-# NOTA Fase 4: o self-healing-webhook NÃO segue a convenção de pasta
-# "<service>-service" dos outros 5. Por isso seu job passa o input
-# `service_dir: services/self-healing-webhook` ao reusable.
-# =============================================================================
+
 
 name: CI/CD Microservices
 
@@ -34,13 +14,7 @@ on:
     branches: [main]
     paths:
       - "services/**"
-      # NOTA: 'gitops/base/**' foi REMOVIDO deste gatilho de propósito.
-      # O job update-gitops commita a nova tag de imagem em
-      # gitops/base/<svc>/deployment.yaml usando o GITOPS_TOKEN (um PAT).
-      # Commits feitos com PAT DISPARAM workflows (ao contrário do
-      # GITHUB_TOKEN), então manter 'gitops/base/**' aqui criava um LAÇO:
-      # build -> commit no manifesto -> novo build -> novo commit...
-      # Mudanças em manifestos são responsabilidade do ArgoCD, não do CI.
+
       - ".github/workflows/cicd-services.yml"
       - ".github/workflows/_reusable-cicd.yml"
   workflow_dispatch:
@@ -234,9 +208,7 @@ jobs:
   ci-self-healing:
     name: self-healing-webhook
     needs: detect-changes
-    # Roda se: forçado, se o próprio self-healing mudou, OU se a observabilidade
-    # mudou (o webhook depende da config de alertas do Alertmanager).
-    # NOTA: comentários '#' NÃO podem ficar dentro da expressão do if — só aqui.
+
     if: >-
       needs.detect-changes.outputs.force_all == 'true' ||
       needs.detect-changes.outputs.self_healing == 'true' ||
@@ -247,9 +219,7 @@ jobs:
       language: python
       ecr_repository: togglemaster-self-healing-webhook
       gitops_path: gitops/base/self-healing/deployment.yaml
-      # IMPORTANTE: a pasta deste serviço é "services/self-healing-webhook"
-      # (sem o sufixo "-service" dos outros). Por isso passamos service_dir
-      # explícito; sem ele o reusable procuraria "self-healing-webhook-service".
+
       service_dir: services/self-healing-webhook
     secrets:
       AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
