@@ -1,24 +1,4 @@
-// Package telemetry — inicialização do OpenTelemetry para serviços Go
-// ===================================================================
-//
-// Este pacote provê uma função `Init` que:
-//   1. Configura um TracerProvider apontando para o OTel Collector via OTLP/HTTP
-//   2. Configura um MeterProvider que envia métricas via OTLP E expõe
-//      /metrics em :9464 (formato Prometheus) — backup para o caso do
-//      OTel Collector cair.
-//   3. Retorna um http.Handler que é um WRAPPER do mux original adicionando
-//      spans automáticos a cada request (otelhttp middleware).
-//
-// Por que separar do main.go?
-//   - O auth-service e o evaluation-service compartilham EXATAMENTE a mesma
-//     lógica de bootstrap. Em vez de copiar 80 linhas no main.go de cada
-//     um, isolamos aqui. Cada serviço importa "./telemetry" do seu próprio
-//     contexto de build.
-//
-// Variáveis de ambiente respeitadas:
-//   OTEL_SERVICE_NAME            — nome do serviço (ex: auth-service)
-//   OTEL_EXPORTER_OTLP_ENDPOINT  — endpoint do coletor (default OTLP http)
-//   DISABLE_OTEL=true            — desliga TODA a instrumentação (debug local)
+
 package telemetry
 
 import (
@@ -43,19 +23,13 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
-// Shutdown é a função retornada por Init para flush final dos buffers.
-// Chame-a em defer no main(). Sem isso, spans em buffer NÃO chegam ao
-// coletor quando o processo termina (kill, SIGTERM no rolling update).
+
 type Shutdown func(context.Context) error
 
 // noopShutdown é o que retornamos quando OTel está desligado.
 func noopShutdown(context.Context) error { return nil }
 
-// Init prepara o OTel para um serviço Go.
-//
-// Retornos:
-//   - shutdown: função de cleanup
-//   - error:    se a inicialização falhar (não fatal — ver chamadas no main)
+
 func Init(ctx context.Context, serviceName string) (Shutdown, error) {
 	if os.Getenv("DISABLE_OTEL") == "true" {
 		log.Println("OpenTelemetry desabilitado via DISABLE_OTEL=true")
@@ -107,10 +81,7 @@ func Init(ctx context.Context, serviceName string) (Shutdown, error) {
 		propagation.Baggage{},
 	))
 
-	// -------- Metrics --------
-	// 2 leitores:
-	//  a) OTLP -> Collector -> Prometheus/Datadog
-	//  b) /metrics local (Prometheus scrape direto, fallback)
+
 	metricExp, err := otlpmetrichttp.New(ctx,
 		otlpmetrichttp.WithEndpoint(endpoint),
 		otlpmetrichttp.WithInsecure(),
@@ -157,13 +128,7 @@ func Init(ctx context.Context, serviceName string) (Shutdown, error) {
 	return shutdown, nil
 }
 
-// WrapHandler embrulha um http.Handler com:
-//  1) o middleware otelhttp (gera spans para o tracing distribuído / Service Map)
-//  2) um middleware de MÉTRICAS CUSTOMIZADAS com nomes DETERMINÍSTICOS
-//     (http_requests_total e http_request_duration_seconds), idênticos aos
-//     emitidos pelos serviços Python. Sem isso, o otelhttp emitiria
-//     `http.server.request.duration` cuja tradução para Prometheus é
-//     imprevisível entre versões, e os alertas/dashboard ficariam vazios.
+
 func WrapHandler(handler http.Handler, serverName string) http.Handler {
 	meter := otel.GetMeterProvider().Meter("togglemaster.http")
 
@@ -171,11 +136,7 @@ func WrapHandler(handler http.Handler, serverName string) http.Handler {
 	requestsTotal, _ := meter.Int64Counter(
 		"http_requests",
 		metricapi.WithDescription("Total de requisições HTTP processadas"),
-		// SEM WithUnit: o exportador Prometheus do Go mapeia a unidade "1"
-		// (dimensionless) para o sufixo "_ratio", gerando
-		// "http_requests_ratio_total" em vez de "http_requests_total".
-		// Isso deixava auth/evaluation fora dos alertas e do dashboard, que
-		// consultam http_requests_total (nome emitido pelos serviços Python).
+
 	)
 	// Histogram em segundos, com buckets explícitos adequados a uma API web
 	requestDuration, _ := meter.Float64Histogram(
@@ -230,10 +191,7 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-// WrapTransport embrulha o http.RoundTripper para que chamadas HTTP DE SAÍDA
-// propaguem o trace context (header `traceparent` do W3C) para o próximo
-// serviço. É a metade "client" do tracing distribuído — sem isso, cada
-// serviço cria seu próprio trace isolado e o Service Map fica desconexo.
+
 func WrapTransport(base http.RoundTripper) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
