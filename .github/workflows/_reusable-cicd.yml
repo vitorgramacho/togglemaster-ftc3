@@ -1,15 +1,4 @@
-# =============================================================================
-# Workflow reutilizável — ToggleMaster CI/CD por microsserviço
-#
-# Este workflow é chamado pelos 5 workflows  (ci-<service>.yml).
-# Estágios (jobs):
-#   1) build-test         → compila e roda testes unitários
-#   2) lint               → golangci-lint (Go) ou flake8 (Python)
-#   3) security           → SCA (Trivy fs) + SAST (gosec/bandit)
-#                          ↳ FALHA o pipeline em CRITICAL
-#   4) docker             → build da imagem + Trivy image scan + push ECR
-#   5) update-gitops      → atualiza tag de imagem no repo GitOps
-# =============================================================================
+
 
 name: Reusable CI/CD
 
