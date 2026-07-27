@@ -66,13 +66,7 @@ func main() {
 		log.Fatal("AWS_REGION deve ser definida para usar SQS")
 	}
 
-	// =========================================================================
-	// OpenTelemetry — Fase 4
-	// -----------------------------------------------------------------------
-	// O evaluation-service é o serviço CRÍTICO do cenário descrito no
-	// enunciado ("começou a falhar silenciosamente"). Daí a importância
-	// extra das métricas/traces aqui.
-	// =========================================================================
+
 	otelCtx, otelCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer otelCancel()
 	shutdownOtel, err := telemetry.Init(otelCtx, "evaluation-service")
@@ -129,9 +123,7 @@ func main() {
 
 	httpClient := &http.Client{
 		Timeout: 5 * time.Second,
-		// Embrulha o Transport com otelhttp -> chamadas para flag-service e
-		// targeting-service injetam o header `traceparent` automaticamente,
-		// ligando o trace fim-a-fim. SEM isso, o Service Map fica desconexo.
+
 		Transport: telemetry.WrapTransport(http.DefaultTransport),
 	}
 
