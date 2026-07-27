@@ -1,13 +1,4 @@
-# =============================================================================
-# Módulo: Networking
-# Provisiona VPC, subnets públicas/privadas, Internet Gateway, NAT Gateway
-# e Route Tables.
-#
-# O ponto de entrada externo é o NLB criado automaticamente pelo Kubernetes
-# quando o ingress-nginx é instalado com type=LoadBalancer. Não há ALB neste
-# módulo — ele foi removido para eliminar custo desnecessário (~$5/mês parado
-# sem nenhum node registrado no Target Group).
-# =============================================================================
+
 
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, 2)
@@ -41,11 +32,7 @@ resource "aws_internet_gateway" "main" {
   })
 }
 
-# -----------------------------------------------------------------------------
-# Subnets Públicas (2 AZs)
-# Tag "kubernetes.io/role/elb" = "1" — obrigatória para o NLB do ingress-nginx
-# encontrar as subnets públicas onde vai se registrar.
-# -----------------------------------------------------------------------------
+
 resource "aws_subnet" "public" {
   count                   = length(var.public_subnet_cidrs)
   vpc_id                  = aws_vpc.main.id
@@ -60,10 +47,7 @@ resource "aws_subnet" "public" {
   })
 }
 
-# -----------------------------------------------------------------------------
-# Subnets Privadas (2 AZs)
-# Tag "kubernetes.io/role/internal-elb" = "1" — para LBs internos futuros.
-# -----------------------------------------------------------------------------
+
 resource "aws_subnet" "private" {
   count             = length(var.private_subnet_cidrs)
   vpc_id            = aws_vpc.main.id
@@ -77,11 +61,7 @@ resource "aws_subnet" "private" {
   })
 }
 
-# -----------------------------------------------------------------------------
-# NAT Gateway (1 por projeto — adequado para Academy/PoC)
-# Permite que os nodes e pods em subnets privadas acessem a internet
-# (pull de imagens ECR, chamadas AWS SDK, etc.)
-# -----------------------------------------------------------------------------
+
 resource "aws_eip" "nat" {
   domain     = "vpc"
   depends_on = [aws_internet_gateway.main]
