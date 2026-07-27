@@ -1,10 +1,8 @@
 
-
 import logging
 import os
 
 log = logging.getLogger(__name__)
-
 
 def init_telemetry(flask_app=None, service_name: str | None = None) -> None:
 
@@ -43,7 +41,6 @@ def init_telemetry(flask_app=None, service_name: str | None = None) -> None:
         )
         trace.set_tracer_provider(provider)
 
-
         from opentelemetry import metrics
         from opentelemetry.sdk.metrics import MeterProvider
         from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
@@ -69,7 +66,6 @@ def init_telemetry(flask_app=None, service_name: str | None = None) -> None:
             OTLPMetricExporter(endpoint=f"{endpoint}/v1/metrics"),
             export_interval_millis=30_000,
         )
-
 
         from opentelemetry.sdk.metrics.view import View, ExplicitBucketHistogramAggregation
 
@@ -137,7 +133,6 @@ def init_telemetry(flask_app=None, service_name: str | None = None) -> None:
         # FALHA do OTel JAMAIS pode derrubar a aplicação — log e segue.
         log.error("Falha ao inicializar OpenTelemetry (continuando sem): %s", e)
 
-
 def _register_flask_http_metrics(flask_app, service_name: str) -> None:
     """
     Registra métricas HTTP customizadas via before_request/after_request do Flask.
@@ -164,7 +159,6 @@ def _register_flask_http_metrics(flask_app, service_name: str) -> None:
     from opentelemetry import metrics
 
     meter = metrics.get_meter("togglemaster.http", "1.0.0")
-
 
     requests_total = meter.create_counter(
         name="http_requests",
