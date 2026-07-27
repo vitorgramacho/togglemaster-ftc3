@@ -1,11 +1,4 @@
-# =============================================================================
-# ArgoCD Application: Self-Healing Webhook
-# ---------------------------------------------------------------------------
-# Aplica os manifestos de gitops/base/self-healing/ no namespace observability.
-# Separamos esta Application do "observability-stack" porque, em produção,
-# pode haver uma equipe DIFERENTE responsável por response automation —
-# uma Application por dono = governance mais clara no ArgoCD.
-# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
