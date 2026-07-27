@@ -1,8 +1,4 @@
-# =============================================================================
-# Módulo: ECR
-# Cria 1 repositório por microsserviço com scan habilitado e regra
-# de retenção (apaga imagens não-tagueadas com mais de 7 dias).
-# =============================================================================
+
 
 resource "aws_ecr_repository" "this" {
   for_each = toset(var.services)
