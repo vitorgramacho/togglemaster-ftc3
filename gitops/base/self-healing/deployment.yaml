@@ -1,17 +1,4 @@
-# =============================================================================
-# Self-Healing Webhook — ServiceAccount + RBAC + Deployment + Service
-# ---------------------------------------------------------------------------
-# Princípio do menor privilégio:
-#   O ClusterRole concede APENAS get/patch em "deployments" e nos namespaces
-#   *-namespace. Não é cluster-admin — é só o suficiente para fazer rollout.
-#
-# Por que ClusterRole e não Role?
-#   Precisamos atuar em VÁRIOS namespaces (auth-namespace, flag-namespace, ...).
-#   Criar 5 Roles + 5 RoleBindings é mais ruído visual e mais difícil de
-#   manter. Um ClusterRole com RoleBindings POR NAMESPACE seria o ouro;
-#   ficamos com ClusterRoleBinding por simplicidade, ainda dentro do escopo
-#   da fase.
-# =============================================================================
+
 
 ---
 apiVersion: v1
@@ -124,10 +111,7 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
-            # UID/GID numéricos EXPLÍCITOS (batem com o Dockerfile). Sem isto,
-            # com runAsNonRoot=true e usuário criado por nome na imagem, o
-            # kubelet não consegue verificar que não é root e recusa o container
-            # com CreateContainerConfigError.
+
             runAsUser: 10001
             runAsGroup: 10001
             capabilities:
