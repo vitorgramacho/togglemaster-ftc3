@@ -40,14 +40,7 @@ func main() {
 		log.Fatal("MASTER_KEY deve ser definida")
 	}
 
-	// =========================================================================
-	// OpenTelemetry — Fase 4
-	// -----------------------------------------------------------------------
-	// Inicializa traces+metrics. Note que isto roda ANTES de qualquer rota
-	// para que o middleware otelhttp seja registrado a tempo. O `shutdown`
-	// retornado garante que os spans em buffer sejam exportados quando o pod
-	// receber SIGTERM (rolling update / scale-down do K8s).
-	// =========================================================================
+
 	otelCtx, otelCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer otelCancel()
 	shutdownOtel, err := telemetry.Init(otelCtx, "auth-service")
