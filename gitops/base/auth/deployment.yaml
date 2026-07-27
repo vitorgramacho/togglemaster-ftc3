@@ -1,10 +1,4 @@
-# auth-service — Deployment (Fase 4: instrumentado com OpenTelemetry)
-#
-# Mudanças desta fase em relação à Fase 3:
-#   - Anotações `prometheus.io/*` para que o coletor faça scrape do /metrics
-#   - Variáveis OTEL_* apontando para o coletor central
-#   - Variáveis DD_* (vão pelo OTel via tag, mas aceitas pelo agent também)
-#   - Porta 9464 exposta para o Prometheus scrapear
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,9 +23,7 @@ spec:
         tags.datadoghq.com/env: production
         tags.datadoghq.com/version: "1.0.0"
       annotations:
-        # ----- Prometheus scrape -----
-        # O Prometheus configurado em 01-kube-prometheus-stack.yaml pega
-        # POD-level annotations (additionalScrapeConfigs).
+
         prometheus.io/scrape: "true"
         prometheus.io/port:   "9464"
         prometheus.io/path:   "/metrics"
