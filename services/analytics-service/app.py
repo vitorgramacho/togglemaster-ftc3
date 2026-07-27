@@ -122,14 +122,7 @@ def sqs_worker_loop():
 
 app = Flask(__name__)
 
-# ============================================================================
-# OpenTelemetry — Fase 4 (Tech Challenge PosTech)
-# ----------------------------------------------------------------------------
-# Como o analytics-service usa boto3 (SQS+DynamoDB), o init habilita a
-# auto-instrumentação do botocore — cada chamada AWS vira um span no APM.
-# IMPORTANTE: chamado APÓS app = Flask(...) e ANTES das rotas serem
-# definidas pela auto-instrumentação ter efeito.
-# ============================================================================
+
 init_telemetry(flask_app=app, service_name="analytics-service")
 
 @app.route('/health')
