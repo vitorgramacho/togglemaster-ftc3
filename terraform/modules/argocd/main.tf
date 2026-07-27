@@ -1,14 +1,4 @@
-# =============================================================================
-# Módulo: ArgoCD
-# Instala o ArgoCD no cluster EKS via Helm chart oficial.
-#
-# Depois do apply, a UI do ArgoCD fica acessível via port-forward:
-#   kubectl -n argocd port-forward svc/argocd-server 8080:443
-# Login inicial:
-#   user: admin
-#   pass: kubectl -n argocd get secret argocd-initial-admin-secret \
-#           -o jsonpath="{.data.password}" | base64 -d
-# =============================================================================
+
 
 terraform {
   required_providers {
@@ -40,9 +30,7 @@ resource "helm_release" "argocd" {
   version    = var.chart_version
   namespace  = kubernetes_namespace.argocd.metadata[0].name
 
-  # Mantemos o values padrão com poucos ajustes:
-  # - server.service.type = LoadBalancer só se var.expose_lb for true (Academy pode não querer).
-  # - configs.params: desabilita TLS interno entre client e server (simplifica port-forward).
+
   values = [
     yamlencode({
       server = {
@@ -69,23 +57,14 @@ resource "helm_release" "argocd" {
           limits   = { cpu = "300m", memory = "256Mi" }
         }
       }
-      # Componentes OPCIONAIS do ArgoCD desligados para economizar 2 pods
-      # (importante no cluster t3.medium com 2 nós). Nenhum é exigido pela
-      # Fase 4 nem usado no projeto:
-      #  - dex: proxy de SSO (Google/GitHub/LDAP). Não usamos — o login é pelo
-      #    usuário 'admin' local, que NÃO passa pelo dex.
-      #  - notifications: avisa eventos do ArgoCD em Slack/email. Não configurado.
-      #    A "notificação ChatOps" exigida pela Fase 4 vai por outro caminho
-      #    (Alertmanager -> PagerDuty -> Discord), sem relação com isto.
+
       dex = {
         enabled = false
       }
       notifications = {
         enabled = false
       }
-      # applicationset-controller desligado: o projeto cria as Applications
-      # individualmente via kubectl_manifest no Terraform (não usa
-      # ApplicationSets para gerar apps dinamicamente). -1 pod.
+
       applicationSet = {
         enabled = false
       }
@@ -99,10 +78,7 @@ resource "helm_release" "argocd" {
   depends_on = [kubernetes_namespace.argocd]
 }
 
-# -----------------------------------------------------------------------------
-# Application CRDs — registra as 5 apps do ToggleMaster.
-# O ArgoCD vai monitorar o repo GitOps e sincronizar tudo automaticamente.
-# -----------------------------------------------------------------------------
+
 resource "kubectl_manifest" "applications" {
   for_each = toset(var.services)
 
@@ -129,8 +105,7 @@ spec:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
-      # Faz o sync RESPEITAR o ignoreDifferences abaixo (sem isto, o sync
-      # ainda aplicaria o replicas do Git por cima do valor do HPA).
+
       - RespectIgnoreDifferences=true
     retry:
       limit: 5
@@ -138,10 +113,7 @@ spec:
         duration: 10s
         factor: 2
         maxDuration: 3m
-  # O campo spec.replicas dos Deployments é gerido pelo HPA em runtime.
-  # Sem isto, com selfHeal:true o ArgoCD reverteria a escala do HPA para o
-  # valor do Git a cada reconciliação (HPA sobe 1->3, ArgoCD derruba para 1),
-  # quebrando o autoscaling na prática.
+
   ignoreDifferences:
     - group: apps
       kind: Deployment
@@ -152,12 +124,7 @@ YAML
   depends_on = [helm_release.argocd]
 }
 
-# -----------------------------------------------------------------------------
-# Application do Ingress — sincroniza os manifests de Ingress e os
-# ExternalName Services do namespace `togglemaster-edge`.
-# Separado das 5 apps de serviço porque aponta para um path diferente
-# e não tem namespace de destino igual ao nome do serviço.
-# -----------------------------------------------------------------------------
+
 resource "kubectl_manifest" "ingress_app" {
   yaml_body = <<YAML
 apiVersion: argoproj.io/v1alpha1
@@ -193,16 +160,7 @@ YAML
   depends_on = [helm_release.argocd]
 }
 
-# =============================================================================
-# Fase 4: Application "observability-stack"
-# ---------------------------------------------------------------------------
-# É o "App-of-Apps" para Prometheus, Loki, Grafana, OTel, Datadog e self-heal.
-# Aponta para gitops/base/observability/ que contém as 8 Applications + raw
-# manifests numerados (00- a 08-).
-#
-# O ArgoCD CHILD-APPS são criadas POR este Application: descobrindo cada
-# arquivo *.yaml no path e tratando-o como manifesto raw ou Application.
-# =============================================================================
+
 resource "kubectl_manifest" "observability_app" {
   yaml_body = <<YAML
 apiVersion: argoproj.io/v1alpha1
@@ -240,13 +198,7 @@ YAML
   depends_on = [helm_release.argocd]
 }
 
-# =============================================================================
-# Fase 4: Application "self-healing-webhook"
-# ---------------------------------------------------------------------------
-# Aplica os manifestos de gitops/base/self-healing/ no namespace observability.
-# Separado da observability-stack para que rebuilds do webhook não disparem
-# resync da stack inteira.
-# =============================================================================
+
 resource "kubectl_manifest" "self_healing_app" {
   yaml_body = <<YAML
 apiVersion: argoproj.io/v1alpha1
