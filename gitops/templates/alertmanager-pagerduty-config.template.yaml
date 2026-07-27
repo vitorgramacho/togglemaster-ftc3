@@ -1,26 +1,4 @@
-# =============================================================================
-# Alertmanager → PagerDuty (que reencaminha para Discord)
-# ---------------------------------------------------------------------------
-# Fluxo:
-#   Prometheus dispara alerta
-#     -> Alertmanager (este Secret)
-#        -> PagerDuty (cria incidente)
-#           -> Discord (extension webhook configurada na UI do PagerDuty)
-#           -> Self-Healing webhook (extension custom no PagerDuty)
-#
-# Por que o Discord NÃO está no Alertmanager direto?
-#   Para CENTRALIZAR incidente: queremos UM trail de auditoria no PagerDuty
-#   ("quem acknowledgeou, quando", "qual o MTTA/MTTR"). Se o Discord viesse
-#   por dois caminhos (PagerDuty E Alertmanager), teríamos notificação
-#   duplicada para a mesma falha.
-#
-# IMPORTANTE: O `pagerduty_url` e o `service_key` estão como placeholders
-# {{ ... }} que o ArgoCD NÃO substitui. A integração key vem de um Secret
-# externo (`pagerduty-secret`) e é injetada no template via envsubst (ver
-# DEPLOYMENT.md) OU via Argo CD `valueFiles` referenciando uma chave de
-# secret externo - aqui usamos a abordagem mais simples: substituir em
-# tempo de aplicação com `kubectl create secret --from-literal`.
-# =============================================================================
+
 apiVersion: v1
 kind: Secret
 metadata:
@@ -31,9 +9,7 @@ metadata:
     app.kubernetes.io/managed-by: argocd
 type: Opaque
 stringData:
-  # ATENÇÃO: este arquivo deve ter PAGERDUTY_INTEGRATION_KEY substituído no
-  # deploy. Veja docs/fase4/DEPLOYMENT.md -> "Aplicar secret do Alertmanager"
-  # para o comando exato com envsubst.
+
   alertmanager.yaml: |
     global:
       resolve_timeout: 5m
