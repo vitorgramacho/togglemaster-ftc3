@@ -1,12 +1,4 @@
-# =============================================================================
-# ArgoCD Application: OpenTelemetry Collector (Versão Otimizada AWS Academy)
-# ---------------------------------------------------------------------------
-# Peça central do pipeline de observabilidade em modo DaemonSet.
-# Roteia:
-#   - Métricas -> Prometheus (remote write) + Datadog (app metrics)
-#   - Logs     -> Loki (via otlphttp no loki-gateway)
-#   - Traces   -> Datadog (via datadog exporter)
-# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
