@@ -10,9 +10,7 @@ COPY go.mod ./
 RUN go mod download || true
 COPY . .
 
-# Fase 4: `go mod tidy` é OBRIGATÓRIO aqui — adicionamos novas deps OTel
-# em go.mod mas NÃO atualizamos go.sum no repo (porque varia por arquitetura).
-# O `tidy` resolve isso no build.
+
 RUN go mod tidy
 
 # Build estático
@@ -30,7 +28,7 @@ COPY --from=builder /app/evaluation-service .
 RUN chown -R app:app /app
 USER app
 
-# 8004: API HTTP. 9464: /metrics no formato Prometheus (Fase 4)
+
 EXPOSE 8004 9464
 
 CMD ["./evaluation-service"]
